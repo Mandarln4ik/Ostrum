@@ -1,0 +1,5 @@
+{
+  "name": "Ostrum!",
+  "description": "Premium online store for Ostrum Rust servers with admin panel, kit constructor, and Steam integration.",
+  "requestFramePermissions": []
+}
