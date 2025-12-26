@@ -60,11 +60,11 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
   const crates = products.filter(p => p.isCrate);
   const normalProducts = products.filter(p => !p.isCrate);
 
-  const filteredProducts = normalProducts.filter(p => {
-    const catMatch = selectedCategory === 'ALL' || p.category === selectedCategory;
-    const srvMatch = p.serverIds.includes(selectedServerId);
-    return catMatch && srvMatch;
-  });
+  const filteredProducts = products.filter(p => 
+  selectedCategory === 'all' || p.category === selectedCategory
+  ).filter(p => 
+    p.servers?.includes(selectedServerId) 
+  );
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     const getEffectivePrice = (p: Product) => p.discount ? Math.floor(p.price * (1 - p.discount.percent / 100)) : p.price;
