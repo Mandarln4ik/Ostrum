@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
@@ -11,9 +10,12 @@ import Profile from './pages/Profile';
 import CrateOpen from './pages/CrateOpen';
 import Rules from './pages/Rules';
 import LegalPage from './pages/Legal';
-import { Product, User, UserRole, Transaction, PendingItem, CurrencyType, PromoCode, Notification } from './types';
-import { PRODUCTS, MOCK_USER, SERVERS, MOCK_TRANSACTIONS, MOCK_PENDING_ITEMS, GAME_ITEMS } from './services/mockData';
-import { CheckCircle2, Package, Sparkles, X, AlertCircle, Info, Ticket } from 'lucide-react';
+import { User, UserRole, Transaction, PendingItem, PromoCode, Notification, Product } from './types'; // Используем твои типы
+import { MOCK_USER, SERVERS, MOCK_TRANSACTIONS, MOCK_PENDING_ITEMS, GAME_ITEMS } from './services/mockData'; // PRODUCTS убрали из импорта
+import { CheckCircle2, X, AlertCircle, Ticket } from 'lucide-react';
+
+// Подключаем наш сервис API
+import { ProductService } from './services/product.service';
 
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
   if (!user) return <Navigate to="/" replace />;
@@ -95,9 +97,13 @@ const App = () => {
   const [selectedServerId, setSelectedServerId] = useState<string>('srv_1');
   const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>(MOCK_PENDING_ITEMS);
-  const [products, setProductsState] = useState<Product[]>(PRODUCTS);
+  
+  // --- ИЗМЕНЕНИЕ: Загрузка товаров из БД ---
+  const [products, setProductsState] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [purchaseResults, setPurchaseResults] = useState<any[] | null>(null);
   const [promoResult, setPromoResult] = useState<{ status: 'success' | 'error', message: string } | null>(null);
+  
   const [promos, setPromos] = useState<PromoCode[]>([
       { id: '1', code: 'OSTRUM_GIFT', rewardType: 'RUB_BALANCE', rewardValue: 100, maxActivations: 100, currentActivations: 0 },
       { id: '2', code: 'START_BONUS', rewardType: 'PRODUCT', rewardValue: 'p1', maxActivations: 50, currentActivations: 0 },
@@ -105,6 +111,7 @@ const App = () => {
       { id: '4', code: 'WIPE15', rewardType: 'TOPUP_BONUS', rewardValue: 15, maxActivations: 1000, currentActivations: 0 }
   ]);
 
+  // Загружаем пользователя из LocalStorage
   useEffect(() => {
     const savedUser = localStorage.getItem('ostrum_user');
     if (savedUser) {
@@ -115,6 +122,31 @@ const App = () => {
     }
   }, []);
 
+  // --- ИЗМЕНЕНИЕ: Загружаем товары с API при старте ---
+  useEffect(() => {
+    const fetchProducts = async () => {
+        try {
+            setIsLoading(true);
+            // Обращаемся к NestJS API
+            // Внимание: Типы данных с бэкенда должны совпадать с Frontend типами.
+            // Если в БД пока простая структура, часть полей (например lootTable) будет undefined.
+            const data = await ProductService.getAll(); 
+            
+            // Приводим типы, если бэкенд возвращает немного другое (адаптер)
+            // Пока считаем что данные совместимы (или бэкенд пустой и вернет [])
+            setProductsState(data as unknown as Product[]); 
+        } catch (error) {
+            console.error("Ошибка при загрузке товаров с API:", error);
+            // Можно добавить уведомление пользователю
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    fetchProducts();
+  }, []);
+
+  // --- Логика моковых юзеров (пока оставляем как есть, до шага 2) ---
   const handleLogin = () => {
     const newUser: User = { 
       ...MOCK_USER, 
@@ -210,6 +242,7 @@ const App = () => {
       }));
   };
 
+  // --- ВАЖНО: Логика пополнения пока локальная (изменим на ЮKassa в шаге 3) ---
   const handleTopUp = (amount: number, bonusPercent: number = 0, appliedPromoCode?: string) => {
     if (user) {
       const effectiveBonus = bonusPercent + (user.activeTopupBonus || 0);
@@ -226,10 +259,9 @@ const App = () => {
           }
       }
 
-      // Referral Commission logic
       if (user.referredById) {
           const referrerId = user.referredById;
-          const referralCommission = amount * 0.05; // 5% of base top-up
+          const referralCommission = amount * 0.05; 
           
           setAllUsers(prev => prev.map(u => {
               if (u.id === referrerId) {
@@ -260,7 +292,7 @@ const App = () => {
 
   const handleSetReferrer = (referralCode: string) => {
       if (!user) return;
-      if (user.referredById) return; // Already referred
+      if (user.referredById) return; 
 
       const referrer = allUsers.find(u => u.referralCode === referralCode);
       if (!referrer) {
@@ -331,7 +363,8 @@ const App = () => {
           case 'PRODUCT':
               const prod = products.find(p => p.id === promo.rewardValue);
               if (prod) {
-                  const newPending: PendingItem[] = prod.contents.map(c => {
+                  // !Внимание: prod.contents может не быть в БД, если мы не добавили связь. Нужно будет доработать БД.
+                  const newPending: PendingItem[] = (prod.contents || []).map(c => {
                       const gi = GAME_ITEMS.find(g => g.id === c.itemId);
                       return {
                           id: Math.random().toString(36).substr(2, 9),
@@ -365,8 +398,9 @@ const App = () => {
       setPromoResult({ status: 'success', message });
   };
 
+  // --- ВАЖНО: Логика покупки пока на клиенте. В будущем перенесем в API ---
   const handlePurchase = (productId: string, serverId: string, quantity: number = 1) => {
-    const product = products.find(p => p.id === productId);
+    const product = products.find(p => p.id === productId); // Ищем в загруженном из БД списке
     if (!product || !user) return null;
 
     const isActuallyFree = user.freeCrates?.includes(product.id) && quantity === 1;
@@ -382,6 +416,8 @@ const App = () => {
     }
 
     let winningItems: any[] = [];
+    // Если продукт из БД не содержит lootTable, этот код может упасть. 
+    // Убедись, что в БД заполнена эта инфа, или пока не используй кейсы из БД.
     if (product.isCrate && product.lootTable) {
         for (let i = 0; i < quantity; i++) {
             const rand = Math.random() * 100;
@@ -394,7 +430,7 @@ const App = () => {
             const gi = GAME_ITEMS.find(g => g.id === won.itemId);
             winningItems.push({ itemId: won.itemId, name: gi?.name || '?', icon: gi?.icon || '', quantity: won.quantity });
         }
-    } else {
+    } else if (product.contents) {
         winningItems = product.contents.map(c => {
             const gi = GAME_ITEMS.find(g => g.id === c.itemId);
             return { itemId: c.itemId, name: gi?.name || '?', icon: gi?.icon || '', quantity: c.quantity };
@@ -441,6 +477,9 @@ const App = () => {
       localStorage.setItem('ostrum_user', JSON.stringify(updated));
   };
 
+  // Если товары еще грузятся - можно показать лоадер, но Layout обычно нужен для отрисовки хедера
+  // Поэтому просто передаем пустой массив или спиннер внутри Home
+  
   return (
     <Router>
       <Layout 
@@ -452,7 +491,11 @@ const App = () => {
         onMarkRead={markNotificationRead}
       >
         <Routes>
-          <Route path="/" element={<Home products={products} servers={SERVERS} onProductClick={setSelectedProduct} selectedServerId={selectedServerId} onServerChange={setSelectedServerId} />} />
+          <Route path="/" element={
+              isLoading ? 
+              <div className="flex items-center justify-center min-h-[50vh] text-ostrum-muted">Загрузка магазина...</div> : 
+              <Home products={products} servers={SERVERS} onProductClick={setSelectedProduct} selectedServerId={selectedServerId} onServerChange={setSelectedServerId} />
+          } />
           <Route path="/crate/:id" element={<CrateOpen products={products} user={user} selectedServerId={selectedServerId} onPurchase={handlePurchase} onLoginRequest={handleLogin} onOpenTopUp={handleOpenTopUp} />} />
           <Route path="/servers" element={<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{SERVERS.map(srv => <ServerStatus key={srv.id} server={srv} />)}</div>} />
           <Route path="/rules" element={<Rules />} />
