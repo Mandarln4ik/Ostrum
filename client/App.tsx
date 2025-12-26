@@ -11,11 +11,13 @@ import CrateOpen from './pages/CrateOpen';
 import Rules from './pages/Rules';
 import LegalPage from './pages/Legal';
 import { User, UserRole, Transaction, PendingItem, PromoCode, Notification, Product } from './types'; // Используем твои типы
-import { MOCK_USER, SERVERS, MOCK_TRANSACTIONS, MOCK_PENDING_ITEMS, GAME_ITEMS } from './services/mockData'; // PRODUCTS убрали из импорта
+import { MOCK_USER, MOCK_TRANSACTIONS, MOCK_PENDING_ITEMS, GAME_ITEMS } from './services/mockData'; // PRODUCTS убрали из импорта
 import { CheckCircle2, X, AlertCircle, Ticket } from 'lucide-react';
 
-// Подключаем наш сервис API
 import { ProductService } from './services/product.service';
+import { ServersService, Server } from './services/servers.service';
+
+import { ItemsService, GameItem } from './services/items.service';
 
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
   if (!user) return <Navigate to="/" replace />;
@@ -94,11 +96,11 @@ const App = () => {
   const [allUsers, setAllUsers] = useState<User[]>([{ ...MOCK_USER, productCooldowns: {} }]); 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);
-  const [selectedServerId, setSelectedServerId] = useState<string>('srv_1');
   const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>(MOCK_PENDING_ITEMS);
-  
-  // --- ИЗМЕНЕНИЕ: Загрузка товаров из БД ---
+  const [servers, setServers] = useState<Server[]>([]); 
+  const [selectedServerId, setSelectedServerId] = useState<string>('');
+  const [gameItems, setGameItems] = useState<GameItem[]>([]);
   const [products, setProductsState] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [purchaseResults, setPurchaseResults] = useState<any[] | null>(null);
@@ -110,6 +112,31 @@ const App = () => {
       { id: '3', code: 'LUCKY', rewardType: 'FREE_CRATE', rewardValue: 'p_event_1', maxActivations: 200, currentActivations: 0 },
       { id: '4', code: 'WIPE15', rewardType: 'TOPUP_BONUS', rewardValue: 15, maxActivations: 1000, currentActivations: 0 }
   ]);
+
+
+  useEffect(() => {
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      // Загружаем сервера, продукты...
+      const serversData = await ServersService.getAll();
+      setServers(serversData);
+      
+      const productsData = await ProductService.getAll();
+      setProductsState(productsData);
+
+      // 👇 ЗАГРУЖАЕМ ПРЕДМЕТЫ
+      const itemsData = await ItemsService.getAll();
+      setGameItems(itemsData);
+
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  fetchData();
+  }, []);
 
   // Загружаем пользователя из LocalStorage
   useEffect(() => {
@@ -144,6 +171,35 @@ const App = () => {
     };
 
     fetchProducts();
+  }, []);
+
+  // Единый useEffect для загрузки данных при старте
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // 1. Загружаем Сервера
+        const serversData = await ServersService.getAll();
+        setServers(serversData);
+
+        // Если сервера пришли, выбираем первый по умолчанию
+        if (serversData.length > 0) {
+          setSelectedServerId(serversData[0].identifier);
+        }
+
+        // 2. Загружаем Товары
+        const productsData = await ProductService.getAll();
+        setProductsState(productsData);
+
+      } catch (error) {
+        console.error("Ошибка загрузки данных:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
   // --- Логика моковых юзеров (пока оставляем как есть, до шага 2) ---
@@ -494,18 +550,34 @@ const App = () => {
           <Route path="/" element={
               isLoading ? 
               <div className="flex items-center justify-center min-h-[50vh] text-ostrum-muted">Загрузка магазина...</div> : 
-              <Home products={products} servers={SERVERS} onProductClick={setSelectedProduct} selectedServerId={selectedServerId} onServerChange={setSelectedServerId} />
+              <Home products={products} servers={servers} onProductClick={setSelectedProduct} selectedServerId={selectedServerId} onServerChange={setSelectedServerId} />
           } />
           <Route path="/crate/:id" element={<CrateOpen products={products} user={user} selectedServerId={selectedServerId} onPurchase={handlePurchase} onLoginRequest={handleLogin} onOpenTopUp={handleOpenTopUp} />} />
-          <Route path="/servers" element={<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{SERVERS.map(srv => <ServerStatus key={srv.id} server={srv} />)}</div>} />
+          <Route path="/servers" element={<div className="grid grid-cols-1 md:grid-cols-2 gap-6">{servers.map(srv => <ServerStatus key={srv.id} server={srv} />)}</div>} />
           <Route path="/rules" element={<Rules />} />
           <Route path="/terms" element={<LegalPage type="terms" />} />
           <Route path="/privacy" element={<LegalPage type="privacy" />} />
           <Route path="/offer" element={<LegalPage type="offer" />} />
-          <Route path="/profile" element={<ProtectedRoute user={user}><Profile user={user!} transactions={transactions.filter(t => t.userId === user?.id)} pendingItems={pendingItems} servers={SERVERS} onSetReferrer={handleSetReferrer} /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute user={user} adminOnly><AdminPanel products={products} setProducts={setProductsState} servers={SERVERS} users={allUsers} promos={promos} setPromos={setPromos} onUpdateUserBalance={handleAdminUpdateUserBalance} onSendNotification={addNotificationToUser} onSendGlobalNotification={handleSendGlobalNotification} /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute user={user}><Profile user={user!} transactions={transactions.filter(t => t.userId === user?.id)} pendingItems={pendingItems} servers={servers} onSetReferrer={handleSetReferrer} /></ProtectedRoute>} />
+          <Route path="/admin" element={
+            <ProtectedRoute user={user} adminOnly>
+                <AdminPanel 
+                products={products} 
+                setProducts={setProductsState} 
+                servers={servers} 
+                users={allUsers} 
+                promos={promos} 
+                setPromos={setPromos} 
+                onUpdateUserBalance={handleAdminUpdateUserBalance} 
+                onSendNotification={addNotificationToUser} 
+                onSendGlobalNotification={handleSendGlobalNotification}
+      
+                gameItems={gameItems} 
+                />
+            </ProtectedRoute> 
+          } />
         </Routes>
-        {selectedProduct && <ProductModal product={selectedProduct} user={user} servers={SERVERS} onClose={() => setSelectedProduct(null)} onPurchase={(pid, sid) => handlePurchase(pid, sid)} onLoginRequest={handleLogin} onOpenTopUp={handleOpenTopUp} />}
+        {selectedProduct && <ProductModal product={selectedProduct} user={user} servers={servers} onClose={() => setSelectedProduct(null)} onPurchase={(pid, sid) => handlePurchase(pid, sid)} onLoginRequest={handleLogin} onOpenTopUp={handleOpenTopUp} />}
         {isTopUpOpen && <TopUpModal user={user} promos={promos} onClose={() => setIsTopUpOpen(false)} onTopUp={handleTopUp} />}
         {purchaseResults && <SuccessModal items={purchaseResults} onClose={() => setPurchaseResults(null)} />}
         {promoResult && <PromoResultModal status={promoResult.status} message={promoResult.message} onClose={() => setPromoResult(null)} />}

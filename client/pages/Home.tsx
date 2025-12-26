@@ -1,8 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Product, ProductCategory, ServerInfo } from '../types';
 import { Clock, ShoppingBag, Globe, Server, Package, ArrowUpDown, Filter, Snowflake, Zap, LayoutGrid, ArrowDown, ArrowUp, Star, Percent } from 'lucide-react';
-import { GAME_ITEMS } from '../services/mockData';
 import { Link } from 'react-router-dom';
 
 interface HomeProps {
@@ -54,17 +52,28 @@ const CountdownTimer: React.FC<{ endsAt: string }> = ({ endsAt }) => {
 };
 
 const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selectedServerId, onServerChange }) => {
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'ALL'>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL'); // Изменил тип на string для совместимости с БД
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   
+  // Безопасная фильтрация кейсов (проверка на undefined)
   const crates = products.filter(p => p.isCrate);
-  const normalProducts = products.filter(p => !p.isCrate);
 
-  const filteredProducts = products.filter(p => 
-  selectedCategory === 'all' || p.category === selectedCategory
-  ).filter(p => 
-    p.servers?.includes(selectedServerId) 
-  );
+  // ГЛАВНЫЙ ФИЛЬТР ТОВАРОВ
+  const filteredProducts = products.filter(p => {
+    // 1. Фильтр по категории
+    const categoryMatch = selectedCategory === 'ALL' || p.category === selectedCategory;
+    
+    // 2. Фильтр по серверу
+    // Проверяем, есть ли у товара поле servers и содержит ли оно выбранный ID
+    const serverMatch = p.servers && Array.isArray(p.servers) 
+      ? p.servers.includes(selectedServerId)
+      : false;
+
+    // Если кейс - не показываем в общем списке товаров (они в отдельном блоке)
+    const notCrate = !p.isCrate;
+
+    return categoryMatch && serverMatch && notCrate;
+  });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     const getEffectivePrice = (p: Product) => p.discount ? Math.floor(p.price * (1 - p.discount.percent / 100)) : p.price;
@@ -72,24 +81,19 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
     const priceB = getEffectivePrice(b);
 
     switch (sortBy) {
-      case 'price-asc':
-        return priceA - priceB;
-      case 'price-desc':
-        return priceB - priceA;
-      case 'name-asc':
-        return a.name.localeCompare(b.name);
-      case 'name-desc':
-        return b.name.localeCompare(a.name);
+      case 'price-asc': return priceA - priceB;
+      case 'price-desc': return priceB - priceA;
+      case 'name-asc': return a.name.localeCompare(b.name);
+      case 'name-desc': return b.name.localeCompare(a.name);
       case 'discount':
         const hasDiscountA = a.discount ? 1 : 0;
         const hasDiscountB = b.discount ? 1 : 0;
         if (hasDiscountA !== hasDiscountB) return hasDiscountB - hasDiscountA;
         return (b.discount?.percent || 0) - (a.discount?.percent || 0);
       case 'popular':
-        // Simulating popularity via reverse ID or other heuristic
-        return b.id.localeCompare(a.id);
-      default:
-        return 0;
+        // Сортировка по ID как временная замена популярности
+        return (b.id || 0) > (a.id || 0) ? 1 : -1;
+      default: return 0;
     }
   });
 
@@ -119,8 +123,9 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
           {servers.map(srv => (
             <button
               key={srv.id}
-              onClick={() => onServerChange(srv.id)}
-              className={`px-5 py-3 rounded-xl text-xs font-bold transition-all uppercase tracking-wide border ${selectedServerId === srv.id ? 'bg-ostrum-primary text-white border-ostrum-primary shadow-[0_5px_15px_rgba(139,92,246,0.3)]' : 'bg-black/40 text-ostrum-muted hover:text-white border-white/5'}`}
+              // ВАЖНО: Используем srv.identifier для сравнения (например 'srv_1')
+              onClick={() => onServerChange(srv.identifier)}
+              className={`px-5 py-3 rounded-xl text-xs font-bold transition-all uppercase tracking-wide border ${selectedServerId === srv.identifier ? 'bg-ostrum-primary text-white border-ostrum-primary shadow-[0_5px_15px_rgba(139,92,246,0.3)]' : 'bg-black/40 text-ostrum-muted hover:text-white border-white/5'}`}
             >
               {srv.name}
             </button>
@@ -148,53 +153,55 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
       </div>
 
       {/* --- SECTION 1: CRATES --- */}
-      <section className="relative">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
-            <div className="flex items-center gap-4">
-                <div className="p-3 bg-ostrum-primary/5 rounded-2xl border border-ostrum-primary/10 shadow-lg">
-                    <Package className="text-ostrum-primary" size={32} />
-                </div>
-                <div>
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tight leading-none">Удача Ostrum</h2>
-                    <p className="text-ostrum-muted text-[10px] font-bold uppercase tracking-widest mt-1">Открывай кейсы и получай ценный лут</p>
-                </div>
-            </div>
-            <div className="h-px flex-1 bg-white/5 mx-8 hidden lg:block"></div>
-            <div className="text-ostrum-muted text-[9px] font-bold uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5">
-                Всего товаров: {crates.length}
-            </div>
-        </div>
+      {crates.length > 0 && (
+        <section className="relative">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+              <div className="flex items-center gap-4">
+                  <div className="p-3 bg-ostrum-primary/5 rounded-2xl border border-ostrum-primary/10 shadow-lg">
+                      <Package className="text-ostrum-primary" size={32} />
+                  </div>
+                  <div>
+                      <h2 className="text-3xl font-black text-white uppercase tracking-tight leading-none">Удача Ostrum</h2>
+                      <p className="text-ostrum-muted text-[10px] font-bold uppercase tracking-widest mt-1">Открывай кейсы и получай ценный лут</p>
+                  </div>
+              </div>
+              <div className="h-px flex-1 bg-white/5 mx-8 hidden lg:block"></div>
+              <div className="text-ostrum-muted text-[9px] font-bold uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                  Всего товаров: {crates.length}
+              </div>
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {crates.filter(c => c.serverIds.includes(selectedServerId)).map(crate => (
-                <Link 
-                    to={`/crate/${crate.id}`} 
-                    key={crate.id}
-                    className={`bg-ostrum-card border rounded-[2rem] p-8 group transition-all duration-300 relative overflow-hidden flex flex-col items-center ${crate.currency === 'EVENT' ? 'border-blue-500/10 hover:border-blue-500/30' : 'border-white/5 hover:border-ostrum-primary/30 shadow-2xl'}`}
-                >
-                    <div className={`absolute top-0 right-0 w-32 h-32 blur-[80px] rounded-full -mr-16 -mt-16 group-hover:opacity-60 transition-all ${crate.currency === 'EVENT' ? 'bg-blue-500/10' : 'bg-ostrum-primary/10'}`}></div>
-                    
-                    {crate.currency === 'EVENT' && (
-                        <div className="absolute top-6 left-6 bg-blue-500/20 text-blue-400 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-blue-500/20 shadow-sm">
-                            <Snowflake size={10} /> EVENT
-                        </div>
-                    )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {crates.filter(c => c.servers?.includes(selectedServerId)).map(crate => (
+                  <Link 
+                      to={`/crate/${crate.id}`} 
+                      key={crate.id}
+                      className={`bg-ostrum-card border rounded-[2rem] p-8 group transition-all duration-300 relative overflow-hidden flex flex-col items-center ${crate.currency === 'EVENT' ? 'border-blue-500/10 hover:border-blue-500/30' : 'border-white/5 hover:border-ostrum-primary/30 shadow-2xl'}`}
+                  >
+                      <div className={`absolute top-0 right-0 w-32 h-32 blur-[80px] rounded-full -mr-16 -mt-16 group-hover:opacity-60 transition-all ${crate.currency === 'EVENT' ? 'bg-blue-500/10' : 'bg-ostrum-primary/10'}`}></div>
+                      
+                      {crate.currency === 'EVENT' && (
+                          <div className="absolute top-6 left-6 bg-blue-500/20 text-blue-400 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-blue-500/20 shadow-sm">
+                              <Snowflake size={10} /> EVENT
+                          </div>
+                      )}
 
-                    <img src={crate.image} className="w-44 h-44 object-contain mb-8 drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" alt={crate.name} />
-                    
-                    <h3 className="text-xl font-extrabold text-white text-center mb-2 uppercase tracking-tight leading-tight w-full truncate">{crate.name}</h3>
-                    
-                    <div className={`font-black text-3xl flex items-center gap-1.5 ${crate.currency === 'EVENT' ? 'text-blue-400' : 'text-ostrum-primary'}`}>
-                        {crate.price} {crate.currency === 'RUB' ? '₽' : <Snowflake size={22} />}
-                    </div>
-                    
-                    <div className={`mt-6 w-full text-center py-3.5 rounded-2xl font-bold transition-all uppercase text-[10px] tracking-widest border shadow-lg ${crate.currency === 'EVENT' ? 'bg-blue-500/10 text-blue-400 border-blue-500/10 group-hover:bg-blue-500 group-hover:text-white' : 'bg-ostrum-primary/5 text-ostrum-primary border-ostrum-primary/10 group-hover:bg-ostrum-primary group-hover:text-white'}`}>
-                        {crate.currency === 'EVENT' ? 'За снежинки' : 'Открыть'}
-                    </div>
-                </Link>
-            ))}
-        </div>
-      </section>
+                      <img src={crate.image_url} className="w-44 h-44 object-contain mb-8 drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" alt={crate.name} />
+                      
+                      <h3 className="text-xl font-extrabold text-white text-center mb-2 uppercase tracking-tight leading-tight w-full truncate">{crate.name}</h3>
+                      
+                      <div className={`font-black text-3xl flex items-center gap-1.5 ${crate.currency === 'EVENT' ? 'text-blue-400' : 'text-ostrum-primary'}`}>
+                          {crate.price} {crate.currency === 'RUB' ? '₽' : <Snowflake size={22} />}
+                      </div>
+                      
+                      <div className={`mt-6 w-full text-center py-3.5 rounded-2xl font-bold transition-all uppercase text-[10px] tracking-widest border shadow-lg ${crate.currency === 'EVENT' ? 'bg-blue-500/10 text-blue-400 border-blue-500/10 group-hover:bg-blue-500 group-hover:text-white' : 'bg-ostrum-primary/5 text-ostrum-primary border-ostrum-primary/10 group-hover:bg-ostrum-primary group-hover:text-white'}`}>
+                          {crate.currency === 'EVENT' ? 'За снежинки' : 'Открыть'}
+                      </div>
+                  </Link>
+              ))}
+          </div>
+        </section>
+      )}
 
       {/* --- SECTION 2: PRODUCTS --- */}
       <section className="space-y-10">
@@ -284,14 +291,13 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
                                         </div>
                                     )}
                                     
-                                    {/* Bonus Snowflake Reward Badge - Updated to use product.eventBonus if available */}
                                     {product.currency === 'RUB' && !product.isFree && (
                                         <div className="absolute bottom-4 right-4 bg-[#1e1e2d] text-blue-400 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-blue-500/20 flex items-center gap-2 shadow-2xl">
                                             +{product.eventBonus ? product.eventBonus.toFixed(1) : (product.price * 0.01).toFixed(1)} <Snowflake size={12} fill="currentColor" />
                                         </div>
                                     )}
 
-                                    <img src={product.image} alt={product.name} className="max-h-full max-w-full object-contain drop-shadow-[0_15px_35px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" />
+                                    <img src={product.image_url} alt={product.name} className="max-h-full max-w-full object-contain drop-shadow-[0_15px_35px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-700" />
                                 </div>
 
                                 <div className="p-8 flex-1 flex flex-col">
@@ -319,7 +325,9 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
                 ) : (
                     <div className="flex flex-col items-center justify-center py-24 bg-black/10 rounded-[3rem] border border-white/5 border-dashed">
                         <ShoppingBag size={48} className="text-ostrum-muted/10 mb-6" />
-                        <div className="text-ostrum-muted font-bold uppercase tracking-widest text-[10px] opacity-30">Ничего не найдено</div>
+                        <div className="text-ostrum-muted font-bold uppercase tracking-widest text-[10px] opacity-30">
+                            {products.length === 0 ? "Загрузка товаров..." : "На этом сервере товаров пока нет"}
+                        </div>
                     </div>
                 )}
             </div>

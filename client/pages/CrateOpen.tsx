@@ -1,23 +1,23 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Product, User, GameItem } from '../types';
-import { GAME_ITEMS } from '../services/mockData';
-import { Sparkles, Wallet, AlertTriangle, AlertCircle, ChevronDown, Package, User as UserIcon, ArrowLeft, Snowflake, Info, Gift } from 'lucide-react';
+import { GAME_ITEMS } from '../services/mockData'; // Пока используем мок-словарь для картинок
+import { Sparkles, AlertCircle, ChevronDown, Package, User as UserIcon, ArrowLeft, Snowflake, Info, Gift } from 'lucide-react';
 
 interface CrateOpenProps {
   products: Product[];
   user: User | null;
   selectedServerId: string;
-  onPurchase: (productId: string, serverId: string, quantity: number) => { items: { itemId: string; name: string; icon: string; quantity: number }[] } | null;
+  // onPurchase теперь возвращает Promise
+  onPurchase: (productId: string, serverId: string, quantity: number) => Promise<{ items: { itemId: string; name: string; icon: string; quantity: number }[] } | null>;
   onLoginRequest: () => void;
   onOpenTopUp: () => void;
 }
 
 const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId, onPurchase, onLoginRequest, onOpenTopUp }) => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const product = products.find(p => p.id === id);
+  // Ищем продукт, приводя id к числу или строке для надежности
+  const product = products.find(p => String(p.id) === id);
 
   const [multiplier, setMultiplier] = useState<number>(1);
   const [isOpening, setIsOpening] = useState(false);
@@ -31,16 +31,22 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
 
   const stripRefs = useRef<(HTMLDivElement | null)[]>([]);
   const multiplierOptions = [1, 3, 5, 10];
-  
-  // Reduced item width/height for more compact spinners
   const ITEM_WIDTH = 80;
 
   useEffect(() => {
     if (!product?.lootTable) return;
     
+    // Генерируем ленту прокрутки
     const initialPools = Array.from({ length: 10 }).map(() => {
       const items: GameItem[] = [];
+      // Берем предметы из лут-таблицы продукта
       const pool = product.lootTable!.map(lt => GAME_ITEMS.find(gi => gi.id === lt.itemId)).filter(Boolean) as GameItem[];
+      
+      // Если пул пуст (например, не нашли предметы в словаре), добавляем заглушки
+      if (pool.length === 0) {
+         pool.push({ id: 'unknown', name: '?', icon: 'https://via.placeholder.com/50' });
+      }
+
       for (let i = 0; i < 500; i++) {
         items.push(pool[Math.floor(Math.random() * pool.length)]);
       }
@@ -58,11 +64,13 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
     );
   }
 
-  const hasFreeOpening = user?.freeCrates?.includes(product.id) && multiplier === 1;
+  // Проверка бесплатного открытия
+  const hasFreeOpening = user?.freeCrates?.includes(String(product.id)) && multiplier === 1;
   const totalPrice = hasFreeOpening ? 0 : product.price * multiplier;
+  
   const canAfford = hasFreeOpening || (user && (product.currency === 'RUB' ? user.balance >= totalPrice : user.eventBalance >= totalPrice));
 
-  const handleOpen = () => {
+  const handleOpen = async () => {
     if (!user) {
       onLoginRequest();
       return;
@@ -74,46 +82,62 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
       return;
     }
 
-    const result = onPurchase(product.id, selectedServerId, multiplier);
-    if (!result) return;
+    setIsOpening(true); // Блокируем кнопку сразу
 
-    setShowResult(false);
-    setIsOpening(true);
-    setWinningItems(result.items);
-
-    const updatedPools = stripPools.map(pool => [...pool]);
-    const newIndices = [...currentIndices];
-    const newOffsets = [...spinOffsets];
-
-    result.items.forEach((win, stripIdx) => {
-      const distance = 45 + Math.floor(Math.random() * 25); 
-      const targetIndex = currentIndices[stripIdx] + distance;
+    try {
+      // Делаем запрос на бэкенд
+      const result = await onPurchase(String(product.id), selectedServerId, multiplier);
       
-      const winnerData = GAME_ITEMS.find(gi => gi.id === win.itemId);
-      if (winnerData) {
-        updatedPools[stripIdx][targetIndex] = winnerData;
+      if (!result) {
+        setIsOpening(false);
+        return;
       }
 
-      const randomInnerOffset = Math.floor(Math.random() * (ITEM_WIDTH * 0.7)) + (ITEM_WIDTH * 0.15);
-      
-      const stripEl = stripRefs.current[stripIdx];
-      const containerWidth = stripEl?.offsetWidth || 800;
-      const centerOffset = containerWidth / 2;
-      
-      const targetOffset = -(targetIndex * ITEM_WIDTH + randomInnerOffset - centerOffset);
-      
-      newOffsets[stripIdx] = targetOffset;
-      newIndices[stripIdx] = targetIndex;
-    });
+      setShowResult(false);
+      setWinningItems(result.items);
 
-    setStripPools(updatedPools);
-    setSpinOffsets(newOffsets);
-    setCurrentIndices(newIndices);
+      // --- ЛОГИКА АНИМАЦИИ (Рулетка) ---
+      const updatedPools = stripPools.map(pool => [...pool]);
+      const newIndices = [...currentIndices];
+      const newOffsets = [...spinOffsets];
 
-    setTimeout(() => {
+      result.items.forEach((win, stripIdx) => {
+        const distance = 45 + Math.floor(Math.random() * 25); 
+        const targetIndex = currentIndices[stripIdx] + distance;
+        
+        // Находим картинку выигранного предмета
+        const winnerData = GAME_ITEMS.find(gi => gi.id === win.itemId) || { id: win.itemId, name: win.name, icon: win.icon };
+        
+        if (winnerData) {
+          // Подменяем предмет в ленте на выигрышный
+          updatedPools[stripIdx][targetIndex] = winnerData;
+        }
+
+        const randomInnerOffset = Math.floor(Math.random() * (ITEM_WIDTH * 0.7)) + (ITEM_WIDTH * 0.15);
+        const stripEl = stripRefs.current[stripIdx];
+        const containerWidth = stripEl?.offsetWidth || 800;
+        const centerOffset = containerWidth / 2;
+        const targetOffset = -(targetIndex * ITEM_WIDTH + randomInnerOffset - centerOffset);
+        
+        newOffsets[stripIdx] = targetOffset;
+        newIndices[stripIdx] = targetIndex;
+      });
+
+      setStripPools(updatedPools);
+      setSpinOffsets(newOffsets);
+      setCurrentIndices(newIndices);
+
+      // Показываем результат после окончания анимации
+      setTimeout(() => {
+        setIsOpening(false);
+        setShowResult(true);
+      }, 5500);
+
+    } catch (error) {
+      console.error("Ошибка при открытии кейса:", error);
       setIsOpening(false);
-      setShowResult(true);
-    }, 5500);
+      alert("Произошла ошибка при открытии кейса. Попробуйте позже.");
+    }
   };
 
   const getButtonContent = () => {
@@ -132,7 +156,7 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
           <span className="font-black uppercase text-[10px] tracking-widest">В магазин</span>
         </Link>
         <div className={`flex items-center gap-4 bg-ostrum-card p-3 rounded-2xl border ${product.currency === 'EVENT' ? 'border-blue-500/30' : 'border-white/5 shadow-xl'}`}>
-          <img src={product.image} className="w-10 h-10 object-contain" alt="" />
+          <img src={product.image_url} className="w-10 h-10 object-contain" alt="" />
           <div>
             <h1 className="text-lg font-black text-white uppercase leading-none tracking-tight">{product.name}</h1>
             <span className={`font-black text-[10px] flex items-center gap-1.5 mt-1 ${product.currency === 'EVENT' ? 'text-blue-400' : 'text-ostrum-primary'}`}>
@@ -147,7 +171,6 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
           {Array.from({ length: multiplier }).map((_, stripIdx) => (
             <div 
               key={stripIdx} 
-              // Fix: wrap ref assignment in braces to ensure it returns void (prevents implicit return of element)
               ref={el => { stripRefs.current[stripIdx] = el; }}
               className="relative py-4 bg-ostrum-card/50 rounded-2xl border border-white/5 overflow-hidden shadow-inner"
             >
@@ -201,6 +224,7 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
         </div>
       )}
 
+      {/* Описание и кнопки мультипликатора */}
       <div className="max-w-4xl mx-auto space-y-6">
            <div className={`bg-ostrum-card border rounded-[2rem] p-6 shadow-2xl ${product.currency === 'EVENT' ? 'border-blue-500/10' : 'border-white/5'}`}>
               <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -237,6 +261,7 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
               )}
            </div>
 
+           {/* Содержимое кейса (Список предметов) */}
            <div className={`bg-ostrum-card border rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden ${product.currency === 'EVENT' ? 'border-blue-500/10' : 'border-white/5'}`}>
               <div className="absolute top-0 right-0 w-32 h-32 bg-ostrum-primary/5 blur-[80px] rounded-full -mr-16 -mt-16"></div>
               <h3 className="text-lg font-black text-white uppercase tracking-tighter mb-8 flex items-center gap-3 relative z-10">
@@ -247,8 +272,8 @@ const CrateOpen: React.FC<CrateOpenProps> = ({ products, user, selectedServerId,
                   const item = GAME_ITEMS.find(gi => gi.id === lt.itemId);
                   return (
                     <div key={idx} className="bg-black/30 p-4 rounded-[1.5rem] border border-white/5 flex flex-col items-center group hover:border-white/20 transition-all shadow-inner">
-                      <img src={item?.icon} alt="" className="w-12 h-12 object-contain mb-2 group-hover:scale-110 transition-transform drop-shadow-md" />
-                      <div className="text-[8px] text-ostrum-muted font-bold text-center leading-tight uppercase line-clamp-2 h-5 tracking-tighter">{item?.name}</div>
+                      <img src={item?.icon || 'https://via.placeholder.com/50'} alt="" className="w-12 h-12 object-contain mb-2 group-hover:scale-110 transition-transform drop-shadow-md" />
+                      <div className="text-[8px] text-ostrum-muted font-bold text-center leading-tight uppercase line-clamp-2 h-5 tracking-tighter">{item?.name || 'Unknown'}</div>
                       <div className={`mt-1 font-black text-[10px] ${product.currency === 'EVENT' ? 'text-blue-400' : 'text-ostrum-primary'}`}>x{lt.quantity}</div>
                     </div>
                   );

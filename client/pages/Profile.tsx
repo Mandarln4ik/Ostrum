@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User, PendingItem, Transaction, ServerInfo } from '../types';
 import { Package, Clock, ShoppingBag, Snowflake, Sparkles, Users, Link as LinkIcon, Gift, Copy, Check, Hash } from 'lucide-react';
@@ -108,7 +107,9 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                   ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {pendingItems.map(item => {
-                              const server = servers.find(s => s.id === item.serverId);
+                              // Ищем сервер по identifier, так как в item.serverId лежит строка 'srv_1'
+                              const server = servers.find(s => s.identifier === item.serverId) || servers.find(s => s.id.toString() === item.serverId);
+                              
                               return (
                                   <div key={item.id} className="bg-black/30 border border-white/5 p-6 rounded-3xl flex items-center gap-5 group hover:border-ostrum-primary/30 transition-all">
                                       <div className="bg-white/5 p-4 rounded-2xl group-hover:bg-ostrum-primary/10 transition-colors">
@@ -118,7 +119,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                                           <div className="font-bold text-white uppercase text-[10px] mb-1 tracking-tight truncate max-w-[120px]">{item.itemName}</div>
                                           <div className="text-xl text-ostrum-primary font-black">x{item.quantity}</div>
                                           <div className="text-[9px] text-ostrum-muted mt-2 uppercase font-bold tracking-widest">
-                                              Мир: <span className="text-white">{server?.name?.split('#')[1] || 'Unknown'}</span>
+                                              Мир: <span className="text-white">{server ? server.name : 'Неизвестно'}</span>
                                           </div>
                                       </div>
                                   </div>
@@ -223,7 +224,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                           </thead>
                           <tbody className="divide-y divide-white/5">
                               {transactions.map(tx => {
-                                   const server = servers.find(s => s.id === tx.serverId);
+                                   const server = servers.find(s => s.identifier === tx.serverId) || servers.find(s => s.id.toString() === tx.serverId);
                                    return (
                                       <tr key={tx.id} className="hover:bg-white/5 transition-colors">
                                           <td className="py-6 pl-10">
@@ -236,7 +237,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                                               ))}
                                           </td>
                                           <td className="py-6">
-                                              <div className="text-[10px] text-ostrum-muted uppercase font-bold tracking-widest">{server?.name?.split('#')[1]}</div>
+                                              <div className="text-[10px] text-ostrum-muted uppercase font-bold tracking-widest">{server ? server.name : 'Неизвестно'}</div>
                                           </td>
                                           <td className="py-6">
                                               <span className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase flex items-center gap-1.5 w-fit border ${

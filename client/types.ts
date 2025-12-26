@@ -43,11 +43,10 @@ export interface PromoCode {
 }
 
 export interface GameItem {
-  id: string;
+  code: string;
   name: string;
-  shortname: string;
-  icon: string;
-  stackSize: number;
+  icon_url: string;
+  category?: string;
 }
 
 export interface LootTableItem {
