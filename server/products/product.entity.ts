@@ -25,4 +25,7 @@ export class Product {
 
   @Column({ default: 'misc' })
   category: string;
+
+   @Column({ type: 'json', nullable: true })
+  servers: string[]; 
 }

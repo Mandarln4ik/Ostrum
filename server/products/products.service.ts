@@ -19,8 +19,30 @@ export class ProductsService {
     const count = await this.productsRepository.count();
     if (count === 0) {
       await this.productsRepository.save([
-        { name: 'Assault Rifle', shortname: 'rifle.ak', price: 150, image_url: '/assets/ak.png', category: 'weapons' },
-        { name: 'Metal Facemask', shortname: 'metal.facemask', price: 50, image_url: '/assets/mask.png', category: 'armor' },
+        { 
+          name: 'Assault Rifle', 
+          shortname: 'rifle.ak', 
+          price: 150, 
+          image_url: 'https://rustlabs.com/img/items180/rifle.ak.png', 
+          category: 'weapons',
+          contents: [{ itemId: 'rifle.ak', quantity: 1 }],
+          lootTable: [],
+          isCrate: false,
+          isFree: false,
+          servers: ['srv_1', 'srv_2'] // 👈 Добавили список серверов
+        },
+        { 
+          name: 'Metal Facemask', 
+          shortname: 'metal.facemask', 
+          price: 50, 
+          image_url: 'https://rustlabs.com/img/items180/metal.facemask.png', 
+          category: 'armor',
+          contents: [{ itemId: 'metal.facemask', quantity: 1 }],
+          lootTable: [],
+          isCrate: false,
+          isFree: false,
+          servers: ['srv_1', 'srv_2'] // 👈 И тут тоже
+        },
       ]);
     }
   }
