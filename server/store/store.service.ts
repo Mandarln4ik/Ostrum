@@ -15,7 +15,7 @@ export class StoreService {
     @InjectRepository(Transaction) private transactionRepo: Repository<Transaction>,
   ) {}
 
-  async buy(userId: number, productId: number, serverId: string, quantity: number = 1) {
+   async buy(userId: number, productId: number, serverId: string, quantity: number = 1, isGift: boolean = false) {
     const user = await this.userRepo.findOneBy({ id: userId });
     const product = await this.productRepo.findOneBy({ id: productId });
 
@@ -25,66 +25,60 @@ export class StoreService {
 
     // 1. Расчет цены
     let price = product.price;
-    // Если есть скидка
     if (product.discount && (!product.discount.endsAt || new Date(product.discount.endsAt) > new Date())) {
         price = Math.floor(price * (1 - product.discount.percent / 100));
     }
     const totalCost = price * quantity;
 
-    // 2. Проверка баланса
-    if (product.isFree) {
-       // Проверка кулдауна (если нужно)
-    } else {
+    // 2. Списание средств (ТОЛЬКО ЕСЛИ НЕ ПОДАРОК И НЕ БЕСПЛАТНЫЙ)
+    if (!isGift && !product.isFree) {
+       // Проверка баланса
        if (product.currency === 'RUB' && user.balance < totalCost) throw new BadRequestException('Недостаточно средств');
        if (product.currency === 'EVENT' && user.eventBalance < totalCost) throw new BadRequestException('Недостаточно снежинок');
-    }
 
-    // 3. Списание средств
-    if (!product.isFree) {
-        if (product.currency === 'RUB') {
+       // Списание
+       if (product.currency === 'RUB') {
             user.balance -= totalCost;
-            // Начисление бонуса снежинок
+            // Бонус только при реальной покупке
             const bonus = product.eventBonus ? (product.eventBonus * quantity) : (totalCost * 0.01);
             user.eventBalance += bonus;
-        } else {
+       } else {
             user.eventBalance -= totalCost;
-        }
-        await this.userRepo.save(user);
+       }
+       await this.userRepo.save(user);
     }
 
-    // 4. Определение предметов (Логика Кейса vs Товара)
+    // 3. Определение предметов (Логика Кейса vs Товара)
     let wonItems: any[] = [];
 
     for (let i = 0; i < quantity; i++) {
         if (product.isCrate) {
-            // Рулетка
             const won = this.rollCrate(product.lootTable);
             wonItems.push(won);
         } else {
-            // Обычный товар
             wonItems.push(...(product.contents || []));
         }
     }
 
-    // 5. Выдача в инвентарь
+    // 4. Выдача в инвентарь
     const inventoryEntities = wonItems.map(item => this.inventoryRepo.create({
         userId: user.id,
         itemId: item.itemId,
-        itemName: item.name || item.itemId, // Тут лучше подтянуть реальное имя из таблицы Items, но пока так
+        itemName: item.name || item.itemId,
         quantity: item.quantity,
         serverId: serverId,
-        icon: item.icon || '', // Желательно передавать иконку
+        icon: item.icon || '', 
         status: 'PENDING'
     }));
     await this.inventoryRepo.save(inventoryEntities);
 
-    // 6. Запись в историю
+    // 5. Запись в историю (Если это подарок - пишем, что бесплатно)
     await this.transactionRepo.save({
         userId: user.id,
-        totalAmount: totalCost,
+        totalAmount: isGift ? 0 : totalCost,
         currency: product.currency,
         serverId: serverId,
-        type: 'PURCHASE',
+        type: isGift ? 'GIFT' : 'PURCHASE', // 👈 Помечаем как подарок
         products: wonItems.map(i => ({ name: i.itemId, quantity: i.quantity }))
     });
 

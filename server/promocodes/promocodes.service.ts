@@ -48,11 +48,9 @@ export class PromocodesService {
         await this.usersService.addBalance(userId, promo.rewardValue, 'EVENT');
         rewardMessage = `${promo.rewardValue} ❄`;
     } else if (promo.rewardType === 'PRODUCT' || promo.rewardType === 'FREE_CRATE') {
-        // Выдаем товар (на первый сервер или нужно спросить? 
-        // Пока выдадим на srv_1 как дефолт, или лучше сохранять промокод как "pending_gift")
-        // Для простоты выдадим на Main Server (srv_1). В идеале юзер должен выбирать сервер.
-        await this.storeService.buy(userId, promo.rewardValue, 'srv_1', 1);
-        rewardMessage = 'Предмет на склад (Main Server)';
+        // 👇 Передаем true последним аргументом (isGift)
+        await this.storeService.buy(userId, promo.rewardValue, 'srv_1', 1, true);
+        rewardMessage = 'Предмет выдан на склад (Main Server)';
     }
 
     // 4. Фиксация

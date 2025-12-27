@@ -12,7 +12,7 @@ interface ProfileProps {
   gameItems: GameItem[];
 }
 
-const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, servers, onSetReferrer }) => {
+const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, servers, onSetReferrer, gameItems }) => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'history' | 'referrals'>('inventory');
   const [refInput, setRefInput] = useState('');
   const [copied, setCopied] = useState(false);

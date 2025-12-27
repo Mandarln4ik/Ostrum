@@ -25,6 +25,8 @@ import api from './api/axios';
 // Иконки и UI
 import { CheckCircle2, X, AlertCircle, Ticket } from 'lucide-react';
 
+import { PromocodesService } from './services/promocodes.service';
+
 // --- ЗАЩИТА РОУТОВ ---
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
   if (!user) return <Navigate to="/" replace />;
@@ -102,15 +104,17 @@ const App = () => {
         setIsLoading(true);
 
         // 1. Загрузка глобальных данных
-        const [serversData, productsData, itemsData] = await Promise.all([
+        const [serversData, productsData, itemsData, promosData] = await Promise.all([
             ServersService.getAll().catch(() => []),
             ProductService.getAll().catch(() => []),
-            ItemsService.getAll().catch(() => [])
+            ItemsService.getAll().catch(() => []),
+            PromocodesService.getAll().catch(() => [])
         ]);
 
         setServers(serversData || []);
         setProducts(productsData || []);
         setGameItems(itemsData || []);
+        setPromos(promosData || []);
 
         // Выбор сервера по умолчанию
         if (serversData && serversData.length > 0) {
