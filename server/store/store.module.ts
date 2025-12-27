@@ -11,5 +11,6 @@ import { Transaction} from '../transactions/transaction.entity';
   imports: [TypeOrmModule.forFeature([User, Product, InventoryItem, Transaction])],
   controllers: [StoreController],
   providers: [StoreService],
+  exports: [StoreService], 
 })
 export class StoreModule {}
