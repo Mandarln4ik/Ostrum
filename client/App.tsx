@@ -333,7 +333,8 @@ const App = () => {
                     transactions={(transactions || []).filter(t => t && (!user || t.userId === user.id))} 
                     pendingItems={pendingItems || []} 
                     servers={servers || []} 
-                    onSetReferrer={handleSetReferrer} 
+                    onSetReferrer={handleSetReferrer}
+                    gameItems={gameItems} 
                 />
             </ProtectedRoute>
           } />

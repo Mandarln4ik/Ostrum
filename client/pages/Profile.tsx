@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, PendingItem, Transaction, ServerInfo } from '../types';
 import { Package, Clock, ShoppingBag, Snowflake, Sparkles, Users, Link as LinkIcon, Gift, Copy, Check, Hash, Filter } from 'lucide-react';
+import { GameItem } from '../types';
 
 interface ProfileProps {
   user: User;
@@ -8,6 +9,7 @@ interface ProfileProps {
   pendingItems: PendingItem[];
   servers: ServerInfo[];
   onSetReferrer: (code: string) => void;
+  gameItems: GameItem[];
 }
 
 const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, servers, onSetReferrer }) => {
@@ -136,18 +138,20 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {filteredItems.map(item => {
                               // Безопасный поиск сервера
+                              const libraryItem = gameItems.find(g => g.code === item.itemId || g.name === item.itemName);
+                              const iconUrl = libraryItem?.icon_url || item.icon;
                               const server = servers.find(s => s.identifier === item.serverId) || servers.find(s => String(s.id) === item.serverId);
                               const serverName = server ? server.name : 'Неизвестно';
                               return (
                                   <div key={item.id} className="bg-black/30 border border-white/5 p-6 rounded-3xl flex items-center gap-5 group hover:border-ostrum-primary/30 transition-all">
                                       <div className="bg-white/5 p-4 rounded-2xl group-hover:bg-ostrum-primary/10 transition-colors shrink-0">
-                                        <img src={item.icon || 'https://via.placeholder.com/50'} alt={item.itemName} className="w-14 h-14 object-contain group-hover:scale-110 transition-transform" />
+                                        <img src={iconUrl} onError={(e) => (e.target as HTMLImageElement).src = 'https://via.placeholder.com/50'} alt={item.itemName} className="w-14 h-14 object-contain group-hover:scale-110 transition-transform" />
                                       </div>
                                       <div className="min-w-0">
                                           <div className="font-bold text-white uppercase text-[10px] mb-1 tracking-tight truncate max-w-full" title={item.itemName}>{item.itemName}</div>
                                           <div className="text-xl text-ostrum-primary font-black">x{item.quantity}</div>
                                           <div className="text-[9px] text-ostrum-muted mt-2 uppercase font-bold tracking-widest truncate">
-                                              Мир: <span className="text-white">{serverName}</span>
+                                              Сервер: <span className="text-white">{serverName}</span>
                                           </div>
                                       </div>
                                   </div>

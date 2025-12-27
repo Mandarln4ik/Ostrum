@@ -29,6 +29,8 @@ import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { Category } from './categories/category.entity';
 
+import { PromocodeUsage } from 'promocodes/promocode-usage.entity';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -39,7 +41,7 @@ import { Category } from './categories/category.entity';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
-      entities: [Product, Server, Item, User, NotificationEntity, Promocode, InventoryItem, Transaction, Category], 
+      entities: [Product, Server, Item, User, NotificationEntity, Promocode, InventoryItem, Transaction, Category, PromocodeUsage], 
       synchronize: true, // В продакшене лучше ставить false и использовать миграции! Но для старта true ок.
     }),
     ProductsModule,
