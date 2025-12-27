@@ -26,6 +26,7 @@ import api from './api/axios';
 import { CheckCircle2, X, AlertCircle, Ticket } from 'lucide-react';
 
 import { PromocodesService } from './services/promocodes.service';
+import PromoServerModal from './components/PromoServerModal';
 
 // --- ЗАЩИТА РОУТОВ ---
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
@@ -78,6 +79,7 @@ const SuccessModal: React.FC<{ items: any[], onClose: () => void }> = ({ items, 
 
 const App = () => {
   // === СТЕЙТЫ ДАННЫХ ===
+  const [pendingPromoCode, setPendingPromoCode] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]); 
   const [servers, setServers] = useState<Server[]>([]);
@@ -228,19 +230,40 @@ const App = () => {
   // Активация промокода
   const handleRedeemPromo = async (code: string) => {
       if (!user) return handleLogin();
+
+      // 1. Ищем код в загруженном списке, чтобы узнать его тип
+      const cleanCode = code.trim().toUpperCase();
+      const promoInfo = promos.find(p => p.code === cleanCode);
+
+      // Если мы знаем этот код и он на предмет/кейс -> Просим сервер
+      if (promoInfo && (promoInfo.rewardType === 'PRODUCT' || promoInfo.rewardType === 'FREE_CRATE')) {
+          setPendingPromoCode(cleanCode); // Сохраняем код
+          return; // Прерываем, ждем выбора сервера в модалке
+      }
+
+      // Иначе (или если код не найден в списке, попробуем отправить так, вдруг сработает как баланс)
+      submitRedeem(cleanCode);
+  };
+
+  const submitRedeem = async (code: string, serverId?: string) => {
+      if (!user) return;
       try {
-          // Отправляем запрос на бэкенд (нужно будет реализовать endpoint /promocodes/redeem)
-          // Пока что предположим, что он есть, или выведем сообщение
-          const res = await api.post('/promocodes/redeem', { userId: user.id, code });
+          const res = await PromocodesService.redeem(code, user.id, serverId);
           
-          setPromoResult({ status: 'success', message: `Промокод активирован! Вы получили: ${res.data.reward}` });
+          setPromoResult({ status: 'success', message: `Успешно! Награда: ${res.reward}` });
           
-          // Обновляем профиль (баланс мог измениться)
+          // Обновляем данные пользователя
           const updatedUser = await AuthService.getUser(user.id);
           setUser(updatedUser);
           
+          // Если выдали предмет, обновляем инвентарь (можно оптимизировать, но пока перезапросим)
+          const invRes = await api.get(`/users/${user.id}/inventory`);
+          setPendingItems(invRes.data || []);
+
       } catch (error: any) {
-          setPromoResult({ status: 'error', message: error.response?.data?.message || "Неверный промокод или лимит исчерпан" });
+          setPromoResult({ status: 'error', message: error.response?.data?.message || "Ошибка активации" });
+      } finally {
+          setPendingPromoCode(null); // Закрываем модалку выбора сервера
       }
   };
 
@@ -381,7 +404,13 @@ const App = () => {
                 onTopUp={handleTopUp} 
             />
         )}
-        
+        {pendingPromoCode && (
+            <PromoServerModal 
+                servers={servers} 
+                onClose={() => setPendingPromoCode(null)} 
+                onSelect={(serverId) => submitRedeem(pendingPromoCode, serverId)} 
+            />
+        )}
         {purchaseResults && <SuccessModal items={purchaseResults} onClose={() => setPurchaseResults(null)} />}
         {promoResult && <PromoResultModal status={promoResult.status} message={promoResult.message} onClose={() => setPromoResult(null)} />}
       </Layout>

@@ -9,8 +9,8 @@ export const PromocodesService = {
   },
   
   // Активировать (для обычных кодов)
-  async redeem(code: string, userId: number) {
-      const response = await api.post('/promocodes/redeem', { userId, code });
+  async redeem(code: string, userId: number, serverId?: string) {
+      const response = await api.post('/promocodes/redeem', { userId, code, serverId });
       return response.data;
   }
 };

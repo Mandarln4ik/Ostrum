@@ -26,21 +26,21 @@ export class PromocodesService {
   
   delete(id: number) { return this.repo.delete(id); }
 
-  async redeem(userId: number, code: string) {
+  async redeem(userId: number, code: string, serverId?: string) { // 👈 Добавили аргумент
     const promo = await this.repo.findOneBy({ code: code.toUpperCase() });
     if (!promo) throw new NotFoundException('Промокод не найден');
 
-    // 1. Проверки
+    // ... (проверки активаций и юзера оставь как есть) ...
     if (promo.currentActivations >= promo.maxActivations) throw new BadRequestException('Лимит активаций исчерпан');
     if (promo.userId && Number(promo.userId) !== userId) throw new BadRequestException('Этот код не для вас');
     if (promo.rewardType === 'TOPUP_BONUS') throw new BadRequestException('Этот код активируется при пополнении баланса');
 
-    // 2. Проверка на повтор (если это не бонус пополнения)
     const used = await this.usageRepo.findOneBy({ userId, promocodeId: promo.id });
     if (used) throw new BadRequestException('Вы уже активировали этот код');
 
-    // 3. Выдача награды
+    // 👇 ЛОГИКА ВЫДАЧИ
     let rewardMessage = '';
+    
     if (promo.rewardType === 'RUB_BALANCE') {
         await this.usersService.addBalance(userId, promo.rewardValue, 'RUB');
         rewardMessage = `${promo.rewardValue} ₽`;
@@ -48,12 +48,18 @@ export class PromocodesService {
         await this.usersService.addBalance(userId, promo.rewardValue, 'EVENT');
         rewardMessage = `${promo.rewardValue} ❄`;
     } else if (promo.rewardType === 'PRODUCT' || promo.rewardType === 'FREE_CRATE') {
-        // 👇 Передаем true последним аргументом (isGift)
-        await this.storeService.buy(userId, promo.rewardValue, 'srv_1', 1, true);
-        rewardMessage = 'Предмет выдан на склад (Main Server)';
+        
+        // ⚠️ ВАЖНО: Если сервер не передан, кидаем ошибку
+        if (!serverId) {
+            throw new BadRequestException('Необходимо выбрать сервер для получения предмета');
+        }
+
+        // Выдаем товар на выбранный сервер
+        await this.storeService.buy(userId, promo.rewardValue, serverId, 1, true);
+        rewardMessage = 'Предмет выдан на склад';
     }
 
-    // 4. Фиксация
+    // ... (сохранение использования и инкремент счетчика оставь как есть) ...
     await this.usageRepo.save({ userId, promocodeId: promo.id });
     promo.currentActivations += 1;
     await this.repo.save(promo);

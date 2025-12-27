@@ -11,7 +11,7 @@ export class PromocodesController {
   @Delete(':id') delete(@Param('id') id: string) { return this.service.delete(+id); }
 
   @Post('redeem')
-  redeem(@Body() body: { userId: number, code: string }) {
-    return this.service.redeem(body.userId, body.code);
+  redeem(@Body() body: { userId: number, code: string, serverId?: string }) {
+    return this.service.redeem(body.userId, body.code, body.serverId);
   }
 }
