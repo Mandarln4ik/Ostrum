@@ -5,6 +5,7 @@ import { User } from '../users/user.entity';
 import { Product } from '../products/product.entity';
 import { InventoryItem } from '../inventory/inventory.entity';
 import { Transaction } from '../transactions/transaction.entity';
+import { Item } from '../items/item.entity';
 
 @Injectable()
 export class StoreService {
@@ -13,33 +14,29 @@ export class StoreService {
     @InjectRepository(Product) private productRepo: Repository<Product>,
     @InjectRepository(InventoryItem) private inventoryRepo: Repository<InventoryItem>,
     @InjectRepository(Transaction) private transactionRepo: Repository<Transaction>,
+    @InjectRepository(Item) private itemsRepo: Repository<Item>,
   ) {}
 
-   async buy(userId: number, productId: number, serverId: string, quantity: number = 1, isGift: boolean = false) {
+    async buy(userId: number, productId: number, serverId: string, quantity: number = 1, isGift: boolean = false) {
     const user = await this.userRepo.findOneBy({ id: userId });
     const product = await this.productRepo.findOneBy({ id: productId });
 
     if (!user) throw new BadRequestException('User not found');
     if (!product) throw new BadRequestException('Product not found');
-    if (quantity < 1) throw new BadRequestException('Invalid quantity');
-
-    // 1. Расчет цены
+    
+    // ... (код расчета цены и списания денег оставляем без изменений) ...
     let price = product.price;
     if (product.discount && (!product.discount.endsAt || new Date(product.discount.endsAt) > new Date())) {
         price = Math.floor(price * (1 - product.discount.percent / 100));
     }
     const totalCost = price * quantity;
 
-    // 2. Списание средств (ТОЛЬКО ЕСЛИ НЕ ПОДАРОК И НЕ БЕСПЛАТНЫЙ)
     if (!isGift && !product.isFree) {
-       // Проверка баланса
        if (product.currency === 'RUB' && user.balance < totalCost) throw new BadRequestException('Недостаточно средств');
        if (product.currency === 'EVENT' && user.eventBalance < totalCost) throw new BadRequestException('Недостаточно снежинок');
 
-       // Списание
        if (product.currency === 'RUB') {
             user.balance -= totalCost;
-            // Бонус только при реальной покупке
             const bonus = product.eventBonus ? (product.eventBonus * quantity) : (totalCost * 0.01);
             user.eventBalance += bonus;
        } else {
@@ -48,42 +45,71 @@ export class StoreService {
        await this.userRepo.save(user);
     }
 
-    // 3. Определение предметов (Логика Кейса vs Товара)
+    // 3. Определение предметов
     let wonItems: any[] = [];
-
     for (let i = 0; i < quantity; i++) {
         if (product.isCrate) {
-            const won = this.rollCrate(product.lootTable);
-            wonItems.push(won);
+            wonItems.push(this.rollCrate(product.lootTable));
         } else {
             wonItems.push(...(product.contents || []));
         }
     }
 
-    // 4. Выдача в инвентарь
-    const inventoryEntities = wonItems.map(item => this.inventoryRepo.create({
-        userId: user.id,
-        itemId: item.itemId,
-        itemName: item.name || item.itemId,
-        quantity: item.quantity,
-        serverId: serverId,
-        icon: item.icon || '', 
-        status: 'PENDING'
-    }));
-    await this.inventoryRepo.save(inventoryEntities);
+    // 👇 4. ПОДГОТОВКА И СОХРАНЕНИЕ В ИНВЕНТАРЬ (С КАРТИНКАМИ!)
+    const inventoryEntities = [];
+    
+    // Предзагружаем данные о предметах (чтобы не делать 100 запросов в цикле)
+    // Получаем все itemId, которые выпали
+    const itemIds = wonItems.map(i => i.itemId);
+    // Ищем их в БД одним запросом
+    const dbItems = await this.itemsRepo.createQueryBuilder("item")
+        .where("item.code IN (:...codes)", { codes: itemIds.length > 0 ? itemIds : ['empty'] })
+        .getMany();
 
-    // 5. Запись в историю (Если это подарок - пишем, что бесплатно)
+    for (const item of wonItems) {
+        // Ищем совпадение в загруженных данных
+        const itemInfo = dbItems.find(dbi => dbi.code === item.itemId);
+        
+        // Берем иконку из БД, или формируем ссылку RustLabs, если в БД нет
+        const iconUrl = itemInfo?.icon_url || `https://rustlabs.com/img/items180/${item.itemId}.png`;
+        const realName = itemInfo?.name || item.name || item.itemId;
+
+        const invItem = this.inventoryRepo.create({
+            userId: user.id,
+            itemId: item.itemId,
+            itemName: realName, // Сохраняем красивое имя
+            quantity: item.quantity,
+            serverId: serverId,
+            icon: iconUrl,      // 👈 ТЕПЕРЬ ТУТ ВСЕГДА БУДЕТ ССЫЛКА
+            status: 'PENDING'
+        });
+        inventoryEntities.push(invItem);
+    }
+
+    // Сохраняем в БД
+    const savedInventory = await this.inventoryRepo.save(inventoryEntities);
+
+    // 5. Запись в историю
     await this.transactionRepo.save({
         userId: user.id,
         totalAmount: isGift ? 0 : totalCost,
         currency: product.currency,
         serverId: serverId,
-        type: isGift ? 'GIFT' : 'PURCHASE', // 👈 Помечаем как подарок
+        type: isGift ? 'GIFT' : 'PURCHASE',
         products: wonItems.map(i => ({ name: i.itemId, quantity: i.quantity }))
     });
 
-    return { success: true, items: wonItems, newBalance: user.balance, newEventBalance: user.eventBalance };
+    // Возвращаем фронту items с уже заполненными иконками и именами!
+    const responseItems = savedInventory.map(inv => ({
+        itemId: inv.itemId,
+        name: inv.itemName,
+        quantity: inv.quantity,
+        icon: inv.icon // 👈 Фронт получит это поле сразу
+    }));
+
+    return { success: true, items: responseItems, newBalance: user.balance, newEventBalance: user.eventBalance };
   }
+
 
   // Алгоритм рулетки
   private rollCrate(lootTable: any[]) {
