@@ -20,6 +20,10 @@ import { NotificationEntity } from './notifications/notification.entity';
 import { PromocodesModule } from 'promocodes/promocodes.module';
 import { Promocode } from 'promocodes/promocode.entity';
 
+import { StoreModule } from './store/store.module';
+import { InventoryItem } from './inventory/inventory.entity';
+import { Transaction } from './transactions/transaction.entity';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -30,7 +34,7 @@ import { Promocode } from 'promocodes/promocode.entity';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
-      entities: [Product, Server, Item, User, NotificationEntity, Promocode], // Сюда потом добавим User и Order
+      entities: [Product, Server, Item, User, NotificationEntity, Promocode, InventoryItem, Transaction], 
       synchronize: true, // В продакшене лучше ставить false и использовать миграции! Но для старта true ок.
     }),
     ProductsModule,
@@ -38,7 +42,8 @@ import { Promocode } from 'promocodes/promocode.entity';
     ItemsModule,
     UsersModule,
     NotificationsModule,
-    PromocodesModule
+    PromocodesModule,
+    StoreModule
   ],
 })
 export class AppModule {}
