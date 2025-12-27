@@ -20,7 +20,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogin, onLogout, onOp
   const [showNotifications, setShowNotifications] = useState(false);
   const location = useLocation();
 
-  const unreadCount = user?.notifications.filter(n => !n.read).length || 0;
+  const unreadCount = (user?.notifications || []).filter(n => !n.read).length;
 
   const handleRedeem = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,28 +88,31 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogin, onLogout, onOp
                       {unreadCount > 0 && <span className="text-[9px] text-ostrum-muted font-bold">{unreadCount} новых</span>}
                     </div>
                     <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                      {user.notifications.length > 0 ? (
-                        user.notifications.map((n) => (
-                          <div key={n.id} className={`p-4 border-b border-white/5 hover:bg-white/5 transition-all relative ${!n.read ? 'bg-ostrum-primary/5' : ''}`}>
-                            <div className="flex items-start gap-3">
-                              <div className={`mt-1 p-1.5 rounded-lg ${n.type === 'gift' ? 'bg-green-500/20 text-green-500' : 'bg-ostrum-primary/20 text-ostrum-primary'}`}>
-                                {n.type === 'gift' ? <Plus size={14}/> : <Ticket size={14}/>}
-                              </div>
-                              <div>
-                                <div className="text-[10px] font-black text-white uppercase tracking-tight leading-tight">{n.title}</div>
-                                <div className="text-[10px] text-ostrum-muted mt-1 leading-relaxed">{n.message}</div>
-                                <div className="text-[8px] text-gray-600 mt-2 uppercase font-bold">{new Date(n.date).toLocaleDateString()} {new Date(n.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                              </div>
-                            </div>
-                            {!n.read && (
-                              <button onClick={() => onMarkRead(n.id)} className="absolute top-4 right-4 text-[8px] font-black text-ostrum-primary hover:underline uppercase">OK</button>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="p-8 text-center text-ostrum-muted text-[10px] font-bold uppercase tracking-widest">У вас нет уведомлений</div>
-                      )}
-                    </div>
+  {/* 👇 ДОБАВЛЕНА ЗАЩИТА: (user.notifications || []) */}
+  {(user.notifications || []).length > 0 ? (
+    (user.notifications || []).map((n) => (
+      <div key={n.id} className={`p-4 border-b border-white/5 hover:bg-white/5 transition-all relative ${!n.read ? 'bg-ostrum-primary/5' : ''}`}>
+        <div className="flex items-start gap-3">
+          <div className={`mt-1 p-1.5 rounded-lg ${n.type === 'gift' ? 'bg-green-500/20 text-green-500' : 'bg-ostrum-primary/20 text-ostrum-primary'}`}>
+            {n.type === 'gift' ? <Plus size={14}/> : <Ticket size={14}/>}
+          </div>
+          <div>
+            <div className="text-[10px] font-black text-white uppercase tracking-tight leading-tight">{n.title}</div>
+            <div className="text-[10px] text-ostrum-muted mt-1 leading-relaxed">{n.message}</div>
+            <div className="text-[8px] text-gray-600 mt-2 uppercase font-bold">
+              {new Date(n.date).toLocaleDateString()} {new Date(n.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </div>
+          </div>
+        </div>
+        {!n.read && (
+          <button onClick={() => onMarkRead(n.id)} className="absolute top-4 right-4 text-[8px] font-black text-ostrum-primary hover:underline uppercase">OK</button>
+        )}
+      </div>
+    ))
+  ) : (
+    <div className="p-8 text-center text-ostrum-muted text-[10px] font-bold uppercase tracking-widest">У вас нет уведомлений</div>
+  )}
+</div>
                   </div>
                 )}
               </div>

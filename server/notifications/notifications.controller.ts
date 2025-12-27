@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 
 @Controller('api/notifications')
@@ -13,5 +13,10 @@ export class NotificationsController {
   @Post('global')
   sendGlobal(@Body() body: { title: string, message: string }) {
     return this.service.sendGlobal(body.title, body.message);
+  }
+
+  @Get('user/:id')
+  getByUser(@Param('id') id: string) {
+    return this.service.findByUser(id);
   }
 }

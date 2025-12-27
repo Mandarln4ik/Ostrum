@@ -21,4 +21,14 @@ export class NotificationsService {
     // Пока сделаем упрощенно: создаем запись с userId = 'GLOBAL'
     return this.repo.save({ userId: 'GLOBAL', title, message, type: 'info' });
   }
+
+  async findByUser(userId: string) {
+    return this.repo.find({
+      where: [
+        { userId: userId },    // Личные
+        { userId: 'GLOBAL' }   // Общие для всех
+      ],
+      order: { createdAt: 'DESC' }
+    });
+  }
 }
