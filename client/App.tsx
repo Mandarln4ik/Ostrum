@@ -455,74 +455,50 @@ const App = () => {
   };
 
   // --- ВАЖНО: Логика покупки пока на клиенте. В будущем перенесем в API ---
-  const handlePurchase = (productId: string, serverId: string, quantity: number = 1) => {
-    const product = products.find(p => p.id === productId); // Ищем в загруженном из БД списке
-    if (!product || !user) return null;
+  // В App.tsx
 
-    const isActuallyFree = user.freeCrates?.includes(product.id) && quantity === 1;
-    const totalPrice = isActuallyFree || product.isFree ? 0 : product.price * quantity;
-    
-    if (!isActuallyFree && !product.isFree) {
-        if (product.currency === 'RUB' && user.balance < totalPrice) {
-            handleOpenTopUp();
-            return null;
-        } else if (product.currency === 'EVENT' && user.eventBalance < totalPrice) {
-            return null;
-        }
-    }
+  const handlePurchase = async (productId: string, serverId: string, quantity: number = 1) => {
+    if (!user) return null;
 
-    let winningItems: any[] = [];
-    // Если продукт из БД не содержит lootTable, этот код может упасть. 
-    // Убедись, что в БД заполнена эта инфа, или пока не используй кейсы из БД.
-    if (product.isCrate && product.lootTable) {
-        for (let i = 0; i < quantity; i++) {
-            const rand = Math.random() * 100;
-            let cumulative = 0;
-            let won = product.lootTable[0];
-            for (const item of product.lootTable) {
-                cumulative += item.chance;
-                if (rand <= cumulative) { won = item; break; }
+    try {
+        // Вызываем API
+        const result = await ProductService.buy(user.id, productId, serverId, quantity);
+        
+        if (result.success) {
+            // Обновляем баланс пользователя локально
+            const updatedUser = { ...user, balance: result.newBalance, eventBalance: result.newEventBalance };
+            setUser(updatedUser);
+            setAllUsers(allUsers.map(u => u.id === user.id ? updatedUser : u));
+            localStorage.setItem('ostrum_user', JSON.stringify(updatedUser));
+
+            // Обновляем инвентарь (pendingItems)
+            // В идеале тут надо делать fetchPendingItems(), но пока добавим руками
+            const newItems: PendingItem[] = result.items.map((item: any) => ({
+                id: Math.random().toString(), // Временный ID для фронта
+                itemName: item.name || item.itemId,
+                quantity: item.quantity,
+                icon: item.icon || '',
+                serverId: serverId,
+                purchaseDate: new Date().toISOString(),
+                status: 'PENDING'
+            }));
+            
+            setPendingItems([...newItems, ...pendingItems]); // Добавляем в начало
+            
+            // Если это не кейс, показываем результат
+            const product = products.find(p => String(p.id) === productId);
+            if (product && !product.isCrate) {
+                setPurchaseResults(result.items);
+                setSelectedProduct(null);
             }
-            const gi = GAME_ITEMS.find(g => g.id === won.itemId);
-            winningItems.push({ itemId: won.itemId, name: gi?.name || '?', icon: gi?.icon || '', quantity: won.quantity });
+            
+            return { items: result.items };
         }
-    } else if (product.contents) {
-        winningItems = product.contents.map(c => {
-            const gi = GAME_ITEMS.find(g => g.id === c.itemId);
-            return { itemId: c.itemId, name: gi?.name || '?', icon: gi?.icon || '', quantity: c.quantity };
-        });
+    } catch (error: any) {
+        console.error("Purchase failed:", error);
+        alert(error.response?.data?.message || 'Ошибка покупки');
     }
-
-    let updatedUser = { ...user };
-    if (!isActuallyFree && !product.isFree) {
-        if (product.currency === 'RUB') {
-            updatedUser.balance -= totalPrice;
-            updatedUser.eventBalance += product.eventBonus ? product.eventBonus * quantity : totalPrice * 0.01;
-        } else {
-            updatedUser.eventBalance -= totalPrice;
-        }
-    }
-    if (isActuallyFree) updatedUser.freeCrates = updatedUser.freeCrates.filter(id => id !== product.id);
-    
-    if (product.isFree) {
-        updatedUser.productCooldowns[product.id] = new Date().toISOString();
-    }
-
-    setUser(updatedUser);
-    setAllUsers(allUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
-    localStorage.setItem('ostrum_user', JSON.stringify(updatedUser));
-
-    setPendingItems([...winningItems.map(wi => ({
-        id: Math.random().toString(36).substr(2, 9),
-        itemName: wi.name, quantity: wi.quantity, icon: wi.icon,
-        serverId, purchaseDate: new Date().toISOString(), status: 'PENDING' as const
-    })), ...pendingItems]);
-
-    if (!product.isCrate) {
-        setPurchaseResults(winningItems);
-        setSelectedProduct(null);
-    }
-    return { items: winningItems };
+    return null;
   };
 
   const markNotificationRead = (id: string) => {

@@ -21,7 +21,7 @@ interface AdminPanelProps {
 const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers, users: initialUsers, promos: initialPromos, setPromos, onUpdateUserBalance, onSendNotification, onSendGlobalNotification, gameItems }) => {
   const [activeTab, setActiveTab] = useState<'products' | 'promos' | 'users'>('products');
   
-  // Локальные данные для табов, которые грузим асинхронно
+  // Локальные данные для табов (подгружаются с API)
   const [localPromos, setLocalPromos] = useState<PromoCode[]>(initialPromos);
   const [localUsers, setLocalUsers] = useState<User[]>(initialUsers);
 
@@ -30,6 +30,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
   const [isEditingPromo, setIsEditingPromo] = useState(false);
   const [isGlobalModalOpen, setIsGlobalModalOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false); // Для выбора товара в промокоде
+  const [isUserPickerOpen, setIsUserPickerOpen] = useState(false); // Для выбора юзера в промокоде
   
   // Поиск
   const [searchTerm, setSearchTerm] = useState(''); // Поиск предметов
@@ -51,7 +52,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
     code: '', rewardType: 'RUB_BALANCE', rewardValue: 0, maxActivations: 100, currentActivations: 0, userId: undefined
   });
 
-  // --- ЗАГРУЗКА ДАННЫХ ПРИ ПЕРЕКЛЮЧЕНИИ ---
+  // --- ЗАГРУЗКА ДАННЫХ ПРИ ПЕРЕКЛЮЧЕНИИ ВКЛАДОК ---
   useEffect(() => {
     if (activeTab === 'promos') {
       AdminService.getPromos().then(setLocalPromos).catch(console.error);
@@ -90,8 +91,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
     
     // Shortname нужен плагину Rust для выдачи. Если это кейс - не критично, если товар - обязательно.
     if (!editingProduct.shortname && !editingProduct.isCrate) {
-        // Пытаемся взять shortname первого предмета
         if (editingProduct.contents && editingProduct.contents.length > 0) {
+            // Если shortname пустой, берем первый предмет
             editingProduct.shortname = editingProduct.contents[0].itemId;
         } else {
             return alert('Системное имя (Shortname) не заполнено! Добавьте предмет в содержимое.');
@@ -214,7 +215,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
   const handleSavePromo = async () => {
     if (!editingPromo.code) return alert('Введите код');
     try {
-       const payload = { ...editingPromo, rewardValue: Number(editingPromo.rewardValue) };
+       const payload = { 
+           ...editingPromo, 
+           rewardValue: Number(editingPromo.rewardValue),
+           maxActivations: Number(editingPromo.maxActivations),
+           userId: editingPromo.userId || null 
+       };
+       
        if (editingPromo.id) {
            await AdminService.updatePromo(editingPromo.id, payload);
        } else {
@@ -223,7 +230,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
        const updated = await AdminService.getPromos();
        setLocalPromos(updated);
        setIsEditingPromo(false);
-    } catch(e) { alert('Ошибка сохранения промокода'); }
+    } catch(e) { 
+        console.error(e);
+        alert('Ошибка сохранения промокода'); 
+    }
   };
 
   const handleDeletePromo = async (id: number | string) => {
@@ -235,7 +245,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
   const getSelectedRewardName = () => {
     if (editingPromo.rewardType === 'PRODUCT' || editingPromo.rewardType === 'FREE_CRATE') {
       const p = products.find(p => p.id === editingPromo.rewardValue);
-      return p ? p.name : 'Ничего не выбрано';
+      return p ? p.name : 'Товар не найден (ID: ' + editingPromo.rewardValue + ')';
     }
     return editingPromo.rewardValue;
   };
@@ -308,10 +318,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
                     >
                       <Trash size={14} />
                     </button>
+                    
                     <div className="relative shrink-0">
                        <img src={p.image_url || 'https://via.placeholder.com/50'} className="w-14 h-14 object-contain" alt="" />
                        {p.isCrate && <div className="absolute -bottom-2 -right-2 bg-ostrum-accent text-white text-[8px] font-black px-1.5 rounded shadow-sm">CASE</div>}
                     </div>
+                    
                     <div className="min-w-0">
                       <div className="font-bold text-white uppercase text-[10px] truncate">{p.name}</div>
                       <div className={`font-black text-sm ${p.currency === 'EVENT' ? 'text-blue-400' : 'text-ostrum-primary'}`}>
@@ -462,50 +474,110 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
         <div className="animate-in fade-in">
            {!isEditingPromo ? (
              <div className="space-y-6">
-                <button onClick={()=>{setEditingPromo({code:'', rewardType:'RUB_BALANCE', rewardValue:0}); setIsEditingPromo(true)}} className="bg-ostrum-primary text-white px-6 py-3 rounded-xl font-bold uppercase text-xs">Создать Промокод</button>
+                <button onClick={()=>{setEditingPromo({code:'', rewardType:'RUB_BALANCE', rewardValue:0, maxActivations: 100, currentActivations: 0, userId: undefined}); setIsEditingPromo(true)}} className="bg-ostrum-primary text-white px-6 py-3 rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg">Создать Промокод</button>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                    {localPromos.map(p => (
                       <div key={p.id} onClick={()=>{setEditingPromo(p); setIsEditingPromo(true)}} className="bg-black/20 p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-ostrum-primary relative group">
-                          <button onClick={(e)=>{e.stopPropagation(); handleDeletePromo(p.id)}} className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100"><Trash size={14}/></button>
-                          <div className="text-xl font-black text-white">{p.code}</div>
-                          <div className="text-[10px] text-ostrum-muted uppercase">Награда: {p.rewardValue} ({p.rewardType})</div>
-                          <div className="text-[10px] text-ostrum-muted uppercase">Активаций: {p.currentActivations}/{p.maxActivations}</div>
+                          <button onClick={(e)=>{e.stopPropagation(); handleDeletePromo(p.id)}} className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash size={14}/></button>
+                          <div className="text-xl font-black text-white uppercase">{p.code}</div>
+                          <div className="text-[10px] text-ostrum-muted uppercase font-bold mt-2">
+                              Тип: <span className="text-white">{p.rewardType}</span>
+                          </div>
+                          <div className="text-[10px] text-ostrum-muted uppercase font-bold">
+                              Награда: <span className="text-ostrum-primary">{p.rewardValue}</span>
+                          </div>
+                          <div className="text-[10px] text-ostrum-muted uppercase font-bold mt-1">
+                              Активации: <span className={p.currentActivations >= p.maxActivations ? 'text-red-500' : 'text-green-500'}>{p.currentActivations} / {p.maxActivations}</span>
+                          </div>
+                          {p.userId && <div className="text-[9px] text-blue-400 font-bold mt-1 uppercase">Личный (ID: {p.userId})</div>}
                       </div>
                    ))}
                 </div>
              </div>
            ) : (
-             <div className="bg-black/20 p-8 rounded-[2rem] max-w-lg mx-auto space-y-4">
-                 <h3 className="text-xl font-black text-white uppercase">Настройка промокода</h3>
-                 <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" value={editingPromo.code} onChange={e=>setEditingPromo({...editingPromo, code: e.target.value.toUpperCase()})} placeholder="CODE" />
-                 <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs font-bold" value={editingPromo.rewardType} onChange={e=>setEditingPromo({...editingPromo, rewardType: e.target.value, rewardValue: 0})}>
-                     <option value="RUB_BALANCE">Рубли</option>
-                     <option value="EVENT_BALANCE">Снежинки</option>
-                     <option value="PRODUCT">Товар (ID)</option>
-                     <option value="FREE_CRATE">Бесплатный Кейс (ID)</option>
-                 </select>
+             <div className="bg-black/20 p-8 rounded-[2rem] max-w-lg mx-auto space-y-6 border border-white/5 shadow-2xl">
+                 <h3 className="text-xl font-black text-white uppercase tracking-tight italic">Настройка промокода</h3>
                  
-                 {editingPromo.rewardType === 'PRODUCT' || editingPromo.rewardType === 'FREE_CRATE' ? (
+                 <div>
+                    <label className="text-[9px] font-bold text-ostrum-muted uppercase ml-2">Код</label>
+                    <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold uppercase outline-none focus:border-ostrum-primary" value={editingPromo.code} onChange={e=>setEditingPromo({...editingPromo, code: e.target.value.toUpperCase()})} placeholder="CODE" />
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <button onClick={()=>setIsPickerOpen(!isPickerOpen)} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-left text-white font-bold text-xs uppercase">{getSelectedRewardName()}</button>
-                        {isPickerOpen && (
-                            <div className="mt-2 bg-black/60 border border-white/10 rounded-xl p-2 max-h-48 overflow-y-auto custom-scrollbar grid grid-cols-2 gap-2">
-                                {products.filter(p => editingPromo.rewardType === 'FREE_CRATE' ? p.isCrate : !p.isCrate).map(p => (
-                                    <button key={p.id} onClick={()=>{setEditingPromo({...editingPromo, rewardValue: p.id}); setIsPickerOpen(false)}} className="p-2 text-[9px] font-bold text-white bg-white/5 rounded hover:bg-ostrum-primary truncate">{p.name}</button>
-                                ))}
-                            </div>
-                        )}
+                        <label className="text-[9px] font-bold text-ostrum-muted uppercase ml-2">Тип награды</label>
+                        <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none cursor-pointer" value={editingPromo.rewardType} onChange={e=>setEditingPromo({...editingPromo, rewardType: e.target.value, rewardValue: 0})}>
+                            <option value="RUB_BALANCE">Рубли (Баланс)</option>
+                            <option value="EVENT_BALANCE">Снежинки</option>
+                            <option value="TOPUP_BONUS">Бонус к пополнению (%)</option> {/* 👈 ВОССТАНОВЛЕНО */}
+                            <option value="PRODUCT">Товар (ID)</option>
+                            <option value="FREE_CRATE">Бесплатный Кейс (ID)</option>
+                        </select>
                     </div>
-                 ) : (
-                    <input type="number" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold" value={editingPromo.rewardValue} onChange={e=>setEditingPromo({...editingPromo, rewardValue: Number(e.target.value)})} placeholder="Сумма / ID" />
-                 )}
+                    <div>
+                        <label className="text-[9px] font-bold text-ostrum-muted uppercase ml-2">Лимит активаций</label>
+                        <input type="number" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold outline-none" value={editingPromo.maxActivations} onChange={e=>setEditingPromo({...editingPromo, maxActivations: Number(e.target.value)})} />
+                    </div>
+                 </div>
+                 
+                 <div>
+                    <label className="text-[9px] font-bold text-ostrum-muted uppercase ml-2">Значение награды (Сумма / % / ID)</label>
+                    {editingPromo.rewardType === 'PRODUCT' || editingPromo.rewardType === 'FREE_CRATE' ? (
+                        <div>
+                            <button onClick={()=>setIsPickerOpen(!isPickerOpen)} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-left text-white font-bold text-xs uppercase hover:bg-white/5 transition-all">{getSelectedRewardName()}</button>
+                            {isPickerOpen && (
+                                <div className="mt-2 bg-black/80 border border-white/10 rounded-xl p-2 max-h-48 overflow-y-auto custom-scrollbar grid grid-cols-2 gap-2 absolute z-50 w-64 shadow-xl">
+                                    {products.filter(p => editingPromo.rewardType === 'FREE_CRATE' ? p.isCrate : !p.isCrate).map(p => (
+                                        <button key={p.id} onClick={()=>{setEditingPromo({...editingPromo, rewardValue: p.id}); setIsPickerOpen(false)}} className="p-2 text-[9px] font-bold text-white bg-white/5 rounded hover:bg-ostrum-primary truncate text-left">{p.name}</button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <input type="number" className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold outline-none" value={editingPromo.rewardValue} onChange={e=>setEditingPromo({...editingPromo, rewardValue: Number(e.target.value)})} placeholder="0" />
+                    )}
+                 </div>
+
+                 {/* 👇 ПРИВЯЗКА К ЮЗЕРУ */}
+                 <div>
+                    <label className="text-[9px] font-bold text-ostrum-muted uppercase ml-2">Привязать к игроку (ID) - Опционально</label>
+                    <div className="flex gap-2">
+                        <input type="text" className="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold text-xs outline-none" value={editingPromo.userId || ''} onChange={e=>setEditingPromo({...editingPromo, userId: e.target.value})} placeholder="Оставьте пустым для всех" />
+                        <button onClick={()=>setIsUserPickerOpen(true)} className="bg-white/5 border border-white/10 p-3 rounded-xl hover:bg-white/10"><UserIcon size={16} className="text-white"/></button>
+                    </div>
+                 </div>
 
                  <div className="flex gap-2 pt-4">
-                     <button onClick={handleSavePromo} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold uppercase">Сохранить</button>
-                     <button onClick={()=>setIsEditingPromo(false)} className="px-6 bg-white/10 text-white rounded-xl font-bold uppercase">Отмена</button>
+                     <button onClick={handleSavePromo} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg">Сохранить</button>
+                     <button onClick={()=>setIsEditingPromo(false)} className="px-6 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold uppercase text-xs tracking-widest">Отмена</button>
                  </div>
              </div>
            )}
+        </div>
+      )}
+
+      {/* Picker Modal для Юзеров */}
+      {isUserPickerOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+           <div className="bg-ostrum-card border border-white/10 rounded-[2rem] p-6 w-full max-w-sm h-[60vh] flex flex-col shadow-2xl">
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-white font-black uppercase">Выбрать игрока</h3>
+                  <button onClick={()=>setIsUserPickerOpen(false)}><X className="text-ostrum-muted hover:text-white" size={20}/></button>
+              </div>
+              <input type="text" placeholder="Поиск..." className="bg-black/40 p-3 rounded-xl text-white text-xs font-bold mb-4 outline-none border border-white/5 focus:border-ostrum-primary" onChange={e=>setUserSearchTerm(e.target.value)} />
+              <div className="overflow-y-auto flex-1 custom-scrollbar space-y-2">
+                  <button onClick={()=>{setEditingPromo({...editingPromo, userId: undefined}); setIsUserPickerOpen(false)}} className="w-full p-3 bg-white/5 rounded-xl text-left text-[10px] font-bold text-white hover:bg-white/10">Для всех (Сбросить)</button>
+                  {localUsers.filter(u => u.nickname.toLowerCase().includes(userSearchTerm.toLowerCase())).map(u => (
+                      <button key={u.id} onClick={()=>{setEditingPromo({...editingPromo, userId: String(u.id)}); setIsUserPickerOpen(false)}} className="w-full p-3 bg-black/20 border border-white/5 rounded-xl flex items-center gap-3 hover:border-ostrum-primary transition-all">
+                          <img src={u.avatar} className="w-6 h-6 rounded-md"/>
+                          <div>
+                              <div className="text-[10px] font-bold text-white uppercase">{u.nickname}</div>
+                              <div className="text-[8px] text-ostrum-muted">ID: {u.id}</div>
+                          </div>
+                      </button>
+                  ))}
+              </div>
+           </div>
         </div>
       )}
 
@@ -517,7 +589,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
                <button onClick={()=>setIsGlobalModalOpen(true)} className="bg-blue-600/20 text-blue-400 border border-blue-500/20 px-4 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center gap-2"><Megaphone size={14}/> Всем</button>
             </div>
             
-            <input type="text" placeholder="Поиск игрока..." className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold text-xs mb-4" onChange={e => setUserSearchTerm(e.target.value)} />
+            <input type="text" placeholder="Поиск игрока..." className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold text-xs mb-4 outline-none focus:border-ostrum-primary" onChange={e => setUserSearchTerm(e.target.value)} />
 
             <div className="overflow-x-auto bg-black/20 rounded-2xl border border-white/5">
                <table className="w-full text-left text-sm">
@@ -526,7 +598,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
                      {localUsers.filter(u => u.nickname.toLowerCase().includes(userSearchTerm.toLowerCase()) || u.steamId.includes(userSearchTerm)).map(u => (
                         <tr key={u.id} className="hover:bg-white/5">
                            <td className="py-4 pl-6"><div className="flex items-center gap-3"><img src={u.avatar} className="w-8 h-8 rounded-lg"/><div className="flex flex-col"><span className="text-white text-[10px] font-bold uppercase">{u.nickname}</span><span className="text-[8px] text-ostrum-muted">{u.steamId}</span></div></div></td>
-                           <td className="py-4 text-[10px] font-black text-white">{u.balance} ₽ <span className="text-blue-400 ml-2">{u.eventBalance} ❄</span></td>
+                           <td className="py-4 text-[10px] font-black text-white">{u.balance} ₽ <span className="text-blue-400 ml-2">{u.eventBalance.toFixed(1)} ❄</span></td>
                            <td className="py-4 text-right pr-6 flex justify-end gap-2">
                               <div className="flex bg-black/40 border border-white/5 rounded-lg p-1">
                                  <input className="w-12 bg-transparent text-[9px] text-white p-1 outline-none" placeholder="+RUB" value={bonusInput[u.id]?.rub||''} onChange={e=>handleBonusChange(u.id,'rub',e.target.value)} />
