@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, PendingItem, Transaction, ServerInfo } from '../types';
-import { Package, Clock, ShoppingBag, Snowflake, Sparkles, Users, Link as LinkIcon, Gift, Copy, Check, Hash } from 'lucide-react';
+import { Package, Clock, ShoppingBag, Snowflake, Sparkles, Users, Link as LinkIcon, Gift, Copy, Check, Hash, Filter } from 'lucide-react';
 
 interface ProfileProps {
   user: User;
@@ -14,6 +14,9 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
   const [activeTab, setActiveTab] = useState<'inventory' | 'history' | 'referrals'>('inventory');
   const [refInput, setRefInput] = useState('');
   const [copied, setCopied] = useState(false);
+  
+  // Состояние для фильтра сервера в инвентаре
+  const [selectedServerFilter, setSelectedServerFilter] = useState<string>('ALL');
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(user.referralCode);
@@ -35,12 +38,18 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
       setRefInput('');
   };
 
+  // Фильтрация предметов
+  const filteredItems = pendingItems.filter(item => 
+    selectedServerFilter === 'ALL' || item.serverId === selectedServerFilter
+  );
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
-      {/* Profile Header */}
+    <div className="max-w-6xl mx-auto space-y-8 pb-20 animate-in fade-in duration-500">
+      
+      {/* --- HEADER --- */}
       <div className="bg-ostrum-card rounded-[2.5rem] border border-white/5 p-10 flex flex-col md:flex-row items-center gap-10 shadow-2xl relative overflow-hidden">
          <div className="absolute top-0 right-0 w-64 h-64 bg-ostrum-primary/5 blur-[100px] rounded-full -mr-32 -mt-32"></div>
-         <img src={user.avatar} alt={user.nickname} className="w-32 h-32 rounded-[2rem] shadow-2xl border-2 border-ostrum-primary relative z-10" />
+         <img src={user.avatar || 'https://via.placeholder.com/150'} alt={user.nickname} className="w-32 h-32 rounded-[2rem] shadow-2xl border-2 border-ostrum-primary relative z-10 object-cover" />
          <div className="text-center md:text-left flex-1 relative z-10">
              <h1 className="text-4xl font-black text-white mb-3 uppercase tracking-tighter leading-none">{user.nickname}</h1>
              <div className="text-ostrum-muted mb-6 text-[10px] font-bold uppercase tracking-[0.2em]">Steam ID: {user.steamId}</div>
@@ -59,39 +68,58 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
          </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 p-1.5 bg-ostrum-card border border-white/5 rounded-2xl w-fit mx-auto md:mx-0 shadow-xl">
+      {/* --- TABS --- */}
+      <div className="flex gap-2 p-1.5 bg-ostrum-card border border-white/5 rounded-2xl w-fit mx-auto md:mx-0 shadow-xl overflow-x-auto max-w-full">
           <button 
              onClick={() => setActiveTab('inventory')}
-             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'inventory' ? 'bg-ostrum-primary text-white shadow-lg' : 'bg-transparent text-ostrum-muted hover:text-white'}`}
+             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-ostrum-primary text-white shadow-lg' : 'bg-transparent text-ostrum-muted hover:text-white'}`}
           >
               <Package size={16} /> Склад
           </button>
           <button 
              onClick={() => setActiveTab('referrals')}
-             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'referrals' ? 'bg-ostrum-primary text-white shadow-lg' : 'bg-transparent text-ostrum-muted hover:text-white'}`}
+             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'referrals' ? 'bg-ostrum-primary text-white shadow-lg' : 'bg-transparent text-ostrum-muted hover:text-white'}`}
           >
               <Users size={16} /> Рефералы
           </button>
           <button 
              onClick={() => setActiveTab('history')}
-             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'history' ? 'bg-ostrum-primary text-white shadow-lg' : 'bg-transparent text-ostrum-muted hover:text-white'}`}
+             className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-ostrum-primary text-white shadow-lg' : 'bg-transparent text-ostrum-muted hover:text-white'}`}
           >
               <Clock size={16} /> История
           </button>
       </div>
 
-      {/* Content */}
+      {/* --- CONTENT AREA --- */}
       <div className="bg-ostrum-card rounded-[3rem] border border-white/5 p-10 min-h-[400px] shadow-2xl relative overflow-hidden">
+          
+          {/* TAB: INVENTORY */}
           {activeTab === 'inventory' && (
               <div className="animate-in fade-in duration-500">
-                  <div className="flex items-center gap-3 mb-8">
-                    <Package className="text-ostrum-primary" size={24} />
-                    <h2 className="text-2xl font-black text-white uppercase tracking-tight">Предметы к выдаче</h2>
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                      <div className="flex items-center gap-3">
+                        <Package className="text-ostrum-primary" size={24} />
+                        <h2 className="text-2xl font-black text-white uppercase tracking-tight">Предметы к выдаче</h2>
+                      </div>
+                      
+                      {/* ФИЛЬТР ПО СЕРВЕРАМ */}
+                      <div className="flex items-center gap-2 bg-black/30 p-1.5 rounded-xl border border-white/5">
+                          <Filter size={14} className="ml-2 text-ostrum-muted"/>
+                          <select 
+                            value={selectedServerFilter}
+                            onChange={(e) => setSelectedServerFilter(e.target.value)}
+                            className="bg-transparent text-[10px] font-bold text-white uppercase outline-none p-2 cursor-pointer"
+                          >
+                              <option value="ALL" className="bg-[#1a1a20]">Все серверы</option>
+                              {servers.map(s => (
+                                  <option key={s.id} value={s.identifier} className="bg-[#1a1a20]">{s.name}</option>
+                              ))}
+                          </select>
+                      </div>
                   </div>
                   
                   <div className="bg-blue-500/5 border border-blue-500/10 p-6 rounded-[1.5rem] mb-10 flex items-center gap-6">
-                      <div className="bg-blue-500/20 p-3 rounded-2xl text-blue-400">
+                      <div className="bg-blue-500/20 p-3 rounded-2xl text-blue-400 shrink-0">
                         <Sparkles size={24} />
                       </div>
                       <p className="text-[11px] font-bold text-blue-100/60 leading-relaxed uppercase tracking-wide">
@@ -99,27 +127,28 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                       </p>
                   </div>
                   
-                  {pendingItems.length === 0 ? (
+                  {filteredItems.length === 0 ? (
                       <div className="text-center py-24 text-ostrum-muted uppercase font-black tracking-[0.3em] opacity-10">
                           <ShoppingBag size={80} className="mx-auto mb-6" />
-                          Склад пуст
+                          {pendingItems.length > 0 ? "На этом сервере пусто" : "Склад пуст"}
                       </div>
                   ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {pendingItems.map(item => {
-                              // Ищем сервер по identifier, так как в item.serverId лежит строка 'srv_1'
-                              const server = servers.find(s => s.identifier === item.serverId) || servers.find(s => s.id.toString() === item.serverId);
-                              
+                          {filteredItems.map(item => {
+                              // Безопасный поиск сервера
+                              const server = servers.find(s => s.identifier === item.serverId) || servers.find(s => String(s.id) === item.serverId);
+                              const serverName = server ? server.name : 'Неизвестно';
+
                               return (
                                   <div key={item.id} className="bg-black/30 border border-white/5 p-6 rounded-3xl flex items-center gap-5 group hover:border-ostrum-primary/30 transition-all">
-                                      <div className="bg-white/5 p-4 rounded-2xl group-hover:bg-ostrum-primary/10 transition-colors">
-                                        <img src={item.icon} alt={item.itemName} className="w-14 h-14 object-contain group-hover:scale-110 transition-transform" />
+                                      <div className="bg-white/5 p-4 rounded-2xl group-hover:bg-ostrum-primary/10 transition-colors shrink-0">
+                                        <img src={item.icon || 'https://via.placeholder.com/50'} alt={item.itemName} className="w-14 h-14 object-contain group-hover:scale-110 transition-transform" />
                                       </div>
-                                      <div>
-                                          <div className="font-bold text-white uppercase text-[10px] mb-1 tracking-tight truncate max-w-[120px]">{item.itemName}</div>
+                                      <div className="min-w-0">
+                                          <div className="font-bold text-white uppercase text-[10px] mb-1 tracking-tight truncate max-w-full" title={item.itemName}>{item.itemName}</div>
                                           <div className="text-xl text-ostrum-primary font-black">x{item.quantity}</div>
-                                          <div className="text-[9px] text-ostrum-muted mt-2 uppercase font-bold tracking-widest">
-                                              Мир: <span className="text-white">{server ? server.name : 'Неизвестно'}</span>
+                                          <div className="text-[9px] text-ostrum-muted mt-2 uppercase font-bold tracking-widest truncate">
+                                              Мир: <span className="text-white">{serverName}</span>
                                           </div>
                                       </div>
                                   </div>
@@ -130,6 +159,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
               </div>
           )}
 
+          {/* TAB: REFERRALS */}
           {activeTab === 'referrals' && (
               <div className="animate-in fade-in duration-500 space-y-10">
                   <div className="flex items-center gap-3 mb-8">
@@ -144,7 +174,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                               <div className="bg-ostrum-bg border border-white/10 rounded-2xl p-4 flex items-center justify-between group">
                                   <div className="flex items-center gap-3">
                                       <Hash size={18} className="text-ostrum-primary" />
-                                      <span className="text-xl text-white font-black tracking-widest uppercase">{user.referralCode}</span>
+                                      <span className="text-xl text-white font-black tracking-widest uppercase">{user.referralCode || 'LOADING'}</span>
                                   </div>
                                   <button onClick={copyToClipboard} className="bg-ostrum-primary/20 text-ostrum-primary p-2 rounded-xl hover:bg-ostrum-primary hover:text-white transition-all flex items-center gap-2 px-4">
                                       {copied ? <Check size={16} /> : <Copy size={16} />}
@@ -162,7 +192,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                           <div className="bg-ostrum-primary/10 p-8 rounded-[2rem] border border-ostrum-primary/20 flex flex-col items-center text-center">
                                <div className="text-[10px] font-black text-ostrum-muted uppercase tracking-[0.2em] mb-2">Заработано с реферальной системы:</div>
                                <div className="text-4xl font-black text-white tracking-tighter italic">
-                                   {user.totalReferralEarnings.toFixed(2)} <span className="text-ostrum-primary">₽</span>
+                                   {user.totalReferralEarnings?.toFixed(2) || '0.00'} <span className="text-ostrum-primary">₽</span>
                                </div>
                           </div>
                       </div>
@@ -205,6 +235,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
               </div>
           )}
 
+          {/* TAB: HISTORY */}
           {activeTab === 'history' && (
               <div className="animate-in fade-in duration-500">
                   <div className="flex items-center gap-3 mb-8">
@@ -224,7 +255,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                           </thead>
                           <tbody className="divide-y divide-white/5">
                               {transactions.map(tx => {
-                                   const server = servers.find(s => s.identifier === tx.serverId) || servers.find(s => s.id.toString() === tx.serverId);
+                                   const server = servers.find(s => s.identifier === tx.serverId) || servers.find(s => String(s.id) === tx.serverId);
                                    return (
                                       <tr key={tx.id} className="hover:bg-white/5 transition-colors">
                                           <td className="py-6 pl-10">
@@ -237,7 +268,7 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                                               ))}
                                           </td>
                                           <td className="py-6">
-                                              <div className="text-[10px] text-ostrum-muted uppercase font-bold tracking-widest">{server ? server.name : 'Неизвестно'}</div>
+                                              <div className="text-[10px] text-ostrum-muted uppercase font-bold tracking-widest">{server ? server.name : 'Unknown'}</div>
                                           </td>
                                           <td className="py-6">
                                               <span className={`px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase flex items-center gap-1.5 w-fit border ${

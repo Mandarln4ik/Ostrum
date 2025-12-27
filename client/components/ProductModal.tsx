@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { Product, User, ServerInfo } from '../types';
-import { GAME_ITEMS } from '../services/mockData';
+import { GAME_ITEMS } from '../services/mockData'; // Временно оставляем для картинок, пока не переделаем на API предметов
 import { X, Server as ServerIcon, User as UserIcon, CreditCard, Wallet, AlertTriangle, Clock, Snowflake, Gift as GiftIcon, ArrowRight, Info } from 'lucide-react';
 
 interface ProductModalProps {
@@ -9,20 +8,34 @@ interface ProductModalProps {
   user: User | null;
   servers: ServerInfo[];
   onClose: () => void;
-  onPurchase: (productId: string, serverId: string, method: 'YUKASSA' | 'BALANCE' | 'EVENT') => void;
+  // Обрати внимание: теперь quantity обязателен
+  onPurchase: (productId: string, serverId: string, quantity: number) => void; 
   onLoginRequest: () => void;
   onOpenTopUp: () => void;
 }
 
 const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onClose, onPurchase, onLoginRequest, onOpenTopUp }) => {
-  const availableServers = servers.filter(s => product.serverIds.includes(s.id));
-  const [selectedServer, setSelectedServer] = useState<string>(availableServers[0]?.id || '');
+  
+  // Фильтруем сервера, на которых доступен товар
+  // product.servers - массив строк ['srv_1', 'srv_2']
+  const availableServers = servers.filter(s => 
+    product.servers && Array.isArray(product.servers) && product.servers.includes(s.identifier)
+  );
+
+  const [selectedServer, setSelectedServer] = useState<string>(availableServers[0]?.identifier || '');
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Если серверов нет (баг данных), ставим первый попавшийся или пустую строку
+  useEffect(() => {
+      if (!selectedServer && availableServers.length > 0) {
+          setSelectedServer(availableServers[0].identifier);
+      }
+  }, [availableServers, selectedServer]);
 
   const hasDiscount = product.discount && product.discount.percent > 0;
   const isDiscountActive = hasDiscount && (!product.discount!.endsAt || new Date(product.discount!.endsAt).getTime() > now);
@@ -32,8 +45,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
 
   let isOnCooldown = false;
   let cooldownRemainingText = '';
-  if (product.isFree && user?.productCooldowns[product.id] && product.cooldownHours) {
-      const nextClaim = new Date(user.productCooldowns[product.id]).getTime() + product.cooldownHours * 60 * 60 * 1000;
+  if (product.isFree && user?.productCooldowns && user.productCooldowns[String(product.id)] && product.cooldownHours) {
+      const nextClaim = new Date(user.productCooldowns[String(product.id)]).getTime() + product.cooldownHours * 60 * 60 * 1000;
       if (now < nextClaim) {
           isOnCooldown = true;
           const diff = nextClaim - now;
@@ -45,6 +58,12 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
   }
 
   const bonusAmount = product.eventBonus ? product.eventBonus.toFixed(1) : (currentPrice * 0.01).toFixed(1);
+
+  const handleBuy = () => {
+      if (!selectedServer) return alert('Пожалуйста, выберите сервер!');
+      // Вызываем покупку с количеством 1
+      onPurchase(String(product.id), selectedServer, 1);
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -58,7 +77,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
         {/* Left Side */}
         <div className="w-full md:w-5/12 bg-black/20 p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-white/5 relative">
            <img 
-             src={product.image} 
+             src={product.image_url} 
              alt={product.name} 
              className={`w-full h-48 md:h-64 object-contain mb-8 drop-shadow-2xl transition-transform hover:scale-105 duration-500 ${product.currency === 'EVENT' ? 'drop-shadow-[0_0_35px_rgba(96,165,250,0.3)]' : 'drop-shadow-[0_0_25px_rgba(139,92,246,0.2)]'}`}
            />
@@ -66,9 +85,9 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
            <div className="w-full">
              <h4 className="text-ostrum-muted text-[10px] font-bold uppercase mb-4 tracking-widest ml-1">Содержимое:</h4>
              <div className="grid grid-cols-4 gap-2">
-               {product.contents.map((content, idx) => {
-                  const item = GAME_ITEMS.find(i => i.id === content.itemId);
-                  if (!item) return null;
+               {product.contents?.map((content, idx) => {
+                  // Пытаемся найти предмет в моках, или используем заглушку
+                  const item = GAME_ITEMS.find(i => i.id === content.itemId) || { icon: 'https://via.placeholder.com/50', name: content.itemId };
                   return (
                     <div key={idx} className="bg-black/40 rounded-xl p-3 flex flex-col items-center border border-white/5 hover:border-ostrum-primary/30 transition-colors group" title={item.name}>
                        <img src={item.icon} alt={item.name} className="w-8 h-8 object-contain mb-2 group-hover:scale-110 transition-transform" />
@@ -76,6 +95,9 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
                     </div>
                   );
                })}
+               {(!product.contents || product.contents.length === 0) && (
+                   <div className="col-span-4 text-center text-ostrum-muted text-[10px] uppercase font-bold opacity-50">Пусто</div>
+               )}
              </div>
            </div>
         </div>
@@ -119,9 +141,9 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
                     onChange={(e) => setSelectedServer(e.target.value)}
                     className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold focus:border-ostrum-primary outline-none transition-all cursor-pointer appearance-none uppercase text-xs"
                   >
-                    {availableServers.map(srv => (
-                      <option key={srv.id} value={srv.id} className="bg-ostrum-card">{srv.name}</option>
-                    ))}
+                    {availableServers.length > 0 ? availableServers.map(srv => (
+                      <option key={srv.id} value={srv.identifier} className="bg-ostrum-card">{srv.name}</option>
+                    )) : <option>Нет доступных серверов</option>}
                   </select>
                 </div>
              </div>
@@ -154,14 +176,14 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
                           Через {cooldownRemainingText}
                         </button>
                     ) : (
-                        <button onClick={() => onPurchase(product.id, selectedServer, 'BALANCE')} className="w-full bg-green-600 hover:bg-green-500 text-white py-5 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(34,197,94,0.2)] transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-wide">
+                        <button onClick={handleBuy} className="w-full bg-green-600 hover:bg-green-500 text-white py-5 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(34,197,94,0.2)] transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-wide">
                           <GiftIcon size={24} /> Получить бонус
                         </button>
                     )
                  ) : product.currency === 'EVENT' ? (
                     <div className="space-y-4">
                         <button 
-                            onClick={() => onPurchase(product.id, selectedServer, 'EVENT')}
+                            onClick={handleBuy}
                             disabled={!canAfford}
                             className={`w-full py-5 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all transform uppercase tracking-wide ${canAfford ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_10px_30px_rgba(59,130,246,0.2)] hover:-translate-y-1 active:scale-95' : 'bg-gray-800 text-ostrum-muted cursor-not-allowed'}`}
                         >
@@ -182,7 +204,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ product, user, servers, onC
                    <>
                     {canAfford ? (
                         <button 
-                          onClick={() => onPurchase(product.id, selectedServer, 'BALANCE')} 
+                          onClick={handleBuy} 
                           className="w-full bg-ostrum-primary hover:bg-ostrum-secondary text-white py-5 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 shadow-[0_10px_40px_rgba(139,92,246,0.3)] transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-wide"
                         >
                             <Wallet size={24} /> Оплатить с баланса
