@@ -11,6 +11,15 @@ import { Server } from './servers/server.entity';
 import { ItemsModule } from './items/items.module';
 import { Item } from './items/item.entity';
 
+import { UsersModule } from './users/users.module';
+import { User } from './users/user.entity'; 
+
+import { NotificationsModule } from './notifications/notifications.module';
+import { NotificationEntity } from './notifications/notification.entity'; 
+
+import { PromocodesModule } from 'promocodes/promocodes.module';
+import { Promocode } from 'promocodes/promocode.entity';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -21,12 +30,15 @@ import { Item } from './items/item.entity';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
-      entities: [Product, Server, Item], // Сюда потом добавим User и Order
+      entities: [Product, Server, Item, User, NotificationEntity, Promocode], // Сюда потом добавим User и Order
       synchronize: true, // В продакшене лучше ставить false и использовать миграции! Но для старта true ок.
     }),
     ProductsModule,
     ServersModule,
     ItemsModule,
+    UsersModule,
+    NotificationsModule,
+    PromocodesModule
   ],
 })
 export class AppModule {}
