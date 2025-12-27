@@ -31,6 +31,8 @@ import { Category } from './categories/category.entity';
 
 import { PromocodeUsage } from 'promocodes/promocode-usage.entity';
 
+import { PaymentsModule } from './payments/payments.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -53,6 +55,7 @@ import { PromocodeUsage } from 'promocodes/promocode-usage.entity';
     StoreModule,
     AuthModule,
     CategoriesModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}

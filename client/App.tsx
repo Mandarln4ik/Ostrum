@@ -261,19 +261,32 @@ const App = () => {
   };
 
   const handleTopUp = async (amount: number, bonusPercent: number = 0, appliedPromoCode?: string) => {
-      if (!user) return;
-      try {
-          const res = await api.post('/payments/create', { 
-              userId: user.id, 
-              amount, 
-              promoCode: appliedPromoCode 
-          });
-          if (res.data.confirmationUrl) {
-              window.location.href = res.data.confirmationUrl;
-          }
-      } catch (error: any) {
-          setPromoResult({ status: 'error', message: "Ошибка создания платежа" });
+    if (!user) return handleLogin();
+    
+    try {
+      const res = await api.post('/payments/create', { 
+        userId: user.id, 
+        amount: amount, 
+        promoCode: appliedPromoCode,
+        bonusPercent: bonusPercent // Передаем процент бонуса на сервер
+      });
+
+      if (res.data.confirmationUrl) {
+        // Если мы на локалке, просто имитируем переход
+        if (res.data.confirmationUrl.startsWith('/')) {
+            window.location.hash = '/profile'; // Переходим в профиль
+            // Обновляем баланс в стейте вручную для мгновенного эффекта
+            const updatedUser = await AuthService.getUser(user.id);
+            setUser(updatedUser);
+            setPromoResult({ status: 'success', message: 'Баланс успешно пополнен!' });
+        } else {
+            window.location.href = res.data.confirmationUrl;
+        }
       }
+    } catch (error: any) {
+      console.error("Ошибка пополнения:", error);
+      setPromoResult({ status: 'error', message: "Ошибка создания платежа" });
+    }
   };
 
   const handleUpdateUserBalance = () => {}; 
