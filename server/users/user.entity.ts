@@ -1,5 +1,10 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 
+export enum UserRole {
+  ADMIN = 'admin',
+  USER = 'user',
+}
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
@@ -14,8 +19,12 @@ export class User {
   @Column({ nullable: true })
   avatar: string; // Ссылка на аватарку Steam
 
-  @Column({ default: 'user' })
-  role: string; // 'admin' или 'user'
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.USER,
+  })
+  role: UserRole;
 
   @Column({ default: 0 })
   balance: number; // Рубли

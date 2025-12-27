@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Ticket, Sparkles, AlertCircle } from 'lucide-react';
 import { PromoCode, User } from '../types';
@@ -7,6 +6,7 @@ interface TopUpModalProps {
   user: User | null;
   promos: PromoCode[];
   onClose: () => void;
+  // onTopUp теперь принимает (сумма, бонус%, код)
   onTopUp: (amount: number, bonusPercent: number, appliedPromoCode?: string) => void;
 }
 
@@ -19,6 +19,7 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
   
   const presets = [100, 300, 500, 1000, 2000, 5000];
 
+  // Логика валидации промокода
   useEffect(() => {
     if (!promoInput.trim()) {
         setBonusPercent(0);
@@ -37,13 +38,15 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
         return;
     }
 
+    // Проверяем тип (только TOPUP_BONUS подходит сюда)
     if (foundPromo.rewardType !== 'TOPUP_BONUS') {
         setBonusPercent(0);
         setAppliedPromoCode(undefined);
-        setPromoError("Этот промокод не для пополнения");
+        setPromoError("Этот код не для пополнения");
         return;
     }
 
+    // Проверяем лимит активаций
     if (foundPromo.currentActivations >= foundPromo.maxActivations) {
         setBonusPercent(0);
         setAppliedPromoCode(undefined);
@@ -51,14 +54,11 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
         return;
     }
 
-    if (user?.usedPromos.includes(cleanCode)) {
-        setBonusPercent(0);
-        setAppliedPromoCode(undefined);
-        setPromoError("Вы уже использовали этот код");
-        return;
-    }
+    // Проверяем, использовал ли уже (если такой функционал есть на бэке, лучше чекать там, но пока тут)
+    // В user.usedPromos (если есть) можно хранить список
+    // Пока пропустим, так как поле может отсутствовать
 
-    // Success
+    // Успех!
     setBonusPercent(Number(foundPromo.rewardValue));
     setAppliedPromoCode(cleanCode);
     setPromoError(null);
@@ -67,12 +67,14 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseInt(amount);
-    if (val > 0) {
+    if (!isNaN(val) && val > 0) {
       onTopUp(val, bonusPercent, appliedPromoCode);
     }
   };
 
-  const calculatedTotal = parseInt(amount) + (parseInt(amount) * bonusPercent / 100);
+  const amountVal = parseInt(amount) || 0;
+  const bonusVal = (amountVal * bonusPercent) / 100;
+  const calculatedTotal = amountVal + bonusVal;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -90,7 +92,7 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
 
         <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter italic">Пополнение</h2>
         <p className="text-ostrum-muted text-[10px] mb-8 font-black uppercase tracking-widest border-l-2 border-ostrum-primary pl-3">
-            ЧЕРЕЗ ПЛАТЕЖНЫЙ ШЛЮЗ ЮKASSA
+            ЧЕРЕЗ ПЛАТЕЖНЫЙ ШЛЮЗ (ТЕСТ)
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
@@ -153,26 +155,27 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
                 <div>
                     <div className="text-[10px] font-black text-ostrum-muted uppercase tracking-[0.2em] mb-1">Итого зачислим:</div>
                     <div className="text-3xl font-black text-white tracking-tighter italic">
-                        {isNaN(calculatedTotal) ? 0 : calculatedTotal.toLocaleString()} <span className="text-ostrum-primary">₽</span>
+                        {calculatedTotal.toLocaleString()} <span className="text-ostrum-primary">₽</span>
                     </div>
                 </div>
                 {bonusPercent > 0 && (
                     <div className="bg-green-500/10 text-green-500 px-4 py-2 rounded-xl text-[10px] font-black border border-green-500/10 uppercase tracking-widest shadow-xl">
-                        +{(parseInt(amount) * bonusPercent / 100).toFixed(0)} ₽
+                        +{bonusVal.toFixed(0)} ₽
                     </div>
                 )}
             </div>
 
             <button 
                 type="submit"
-                className="w-full bg-ostrum-primary hover:bg-ostrum-secondary text-white py-6 rounded-[1.5rem] font-black text-lg flex items-center justify-center gap-3 shadow-[0_15px_40px_rgba(139,92,246,0.3)] transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-widest"
+                disabled={amountVal <= 0}
+                className={`w-full py-6 rounded-[1.5rem] font-black text-lg flex items-center justify-center gap-3 shadow-[0_15px_40px_rgba(139,92,246,0.3)] transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-widest ${amountVal > 0 ? 'bg-ostrum-primary hover:bg-ostrum-secondary text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
             >
                 <CreditCard size={24} />
                 Оплатить
             </button>
             
             <div className="flex justify-center opacity-30 hover:opacity-50 transition-all pt-2">
-               <img src="https://yookassa.ru/docs/support/local/templates/images/logo/yookassa-logo-white.svg" alt="YuKassa" className="h-4" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-widest">Тестовый режим</span>
             </div>
         </form>
       </div>
