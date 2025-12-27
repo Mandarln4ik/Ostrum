@@ -19,6 +19,9 @@ import { ServersService, Server } from './services/servers.service';
 
 import { ItemsService, GameItem } from './services/items.service';
 
+import { jwtDecode } from "jwt-decode";
+import { AuthService } from "./services/auth.service";
+
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
   if (!user) return <Navigate to="/" replace />;
   if (adminOnly && user.role !== UserRole.ADMIN) return <Navigate to="/" replace />;
@@ -115,6 +118,48 @@ const App = () => {
 
 
   useEffect(() => {
+    // 1. Проверяем, вернулись ли мы от Steam (есть ли token в URL?)
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get('token');
+
+    if (tokenFromUrl) {
+      // Сохраняем токен
+      localStorage.setItem('token', tokenFromUrl);
+      // Чистим URL (убираем ?token=...)
+      window.history.replaceState({}, document.title, "/");
+      // Перезагружаем страницу, чтобы применились заголовки axios
+      window.location.reload();
+      return;
+    }
+
+    // 2. Проверяем, есть ли токен в памяти
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+          const decoded: any = jwtDecode(token);
+          // decoded.sub — это ID пользователя в базе (мы зашили его туда на бэкенде)
+          AuthService.getUser(decoded.sub).then(userData => {
+            setUser(userData);
+
+            // Обновляем список всех юзеров (для админки/рефералки), если его там нет
+            setAllUsers(prev => {
+              if (!prev.find(u => u.id === userData.id)) {
+                return [...prev, userData];
+              }
+            return prev;});
+            }).catch(err => {
+               console.error("Ошибка загрузки профиля:", err);
+               localStorage.removeItem('token'); // Если токен тухлый
+           });
+       } catch (e) {
+           localStorage.removeItem('token');
+       }
+    }
+    
+    // ... загрузка товаров и серверов ...
+  }, []);
+
+  useEffect(() => {
   const fetchData = async () => {
     try {
       setIsLoading(true);
@@ -204,21 +249,7 @@ const App = () => {
 
   // --- Логика моковых юзеров (пока оставляем как есть, до шага 2) ---
   const handleLogin = () => {
-    const newUser: User = { 
-      ...MOCK_USER, 
-      id: 'u' + Math.floor(Math.random() * 1000000), 
-      freeCrates: [], 
-      usedPromos: [], 
-      notifications: [], 
-      productCooldowns: {}, 
-      referralCode: 'REF-' + Math.floor(Math.random() * 1000000),
-      totalReferralEarnings: 0
-    };
-    setUser(newUser);
-    if (!allUsers.find(u => u.id === newUser.id)) {
-        setAllUsers([...allUsers, newUser]);
-    }
-    localStorage.setItem('ostrum_user', JSON.stringify(newUser));
+    window.location.href = 'http://localhost:3001/api/auth/steam';
   };
 
   const handleOpenTopUp = () => {

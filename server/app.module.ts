@@ -24,6 +24,8 @@ import { StoreModule } from './store/store.module';
 import { InventoryItem } from './inventory/inventory.entity';
 import { Transaction } from './transactions/transaction.entity';
 
+import { AuthModule } from './auth/auth.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -43,7 +45,8 @@ import { Transaction } from './transactions/transaction.entity';
     UsersModule,
     NotificationsModule,
     PromocodesModule,
-    StoreModule
+    StoreModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
