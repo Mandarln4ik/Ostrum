@@ -19,6 +19,9 @@ export class Product {
 
   @Column()
   price: number;
+  
+  @Column({ default: 'RUB' }) 
+  currency: string; // 'RUB' | 'EVENT'
 
   @Column()
   image_url: string;
