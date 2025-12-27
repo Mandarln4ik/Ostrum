@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Product, ProductCategory, ServerInfo } from '../types';
-import { Clock, ShoppingBag, Globe, Server, Package, ArrowUpDown, Filter, Snowflake, Zap, LayoutGrid, ArrowDown, ArrowUp, Star, Percent } from 'lucide-react';
+import { Product, ServerInfo, Category } from '../types';
+import { Clock, ShoppingBag, Server, Package, ArrowDown, ArrowUp, Star, Percent, LayoutGrid, Snowflake } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { CategoriesService } from '../services/categories.service'; // Подключаем сервис
 
 interface HomeProps {
   products: Product[];
@@ -52,24 +53,38 @@ const CountdownTimer: React.FC<{ endsAt: string }> = ({ endsAt }) => {
 };
 
 const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selectedServerId, onServerChange }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL'); // Изменил тип на string для совместимости с БД
+  // Стейт категорий (загружаем из БД)
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all'); 
   const [sortBy, setSortBy] = useState<SortOption>('popular');
+
+  // Загрузка категорий при старте
+  useEffect(() => {
+    const fetchCategories = async () => {
+        try {
+            const data = await CategoriesService.getAll();
+            setCategories(data);
+            // Если массив пустой, можно добавить фоллбэк, но мы рассчитываем на seed
+        } catch (error) {
+            console.error("Ошибка загрузки категорий:", error);
+        }
+    };
+    fetchCategories();
+  }, []);
   
-  // Безопасная фильтрация кейсов (проверка на undefined)
   const crates = products.filter(p => p.isCrate);
 
   // ГЛАВНЫЙ ФИЛЬТР ТОВАРОВ
   const filteredProducts = products.filter(p => {
-    // 1. Фильтр по категории
-    const categoryMatch = selectedCategory === 'ALL' || p.category === selectedCategory;
+    // 1. Фильтр по категории (сравниваем slug)
+    const categoryMatch = selectedCategory === 'all' || selectedCategory === 'ALL' || p.category === selectedCategory;
     
     // 2. Фильтр по серверу
-    // Проверяем, есть ли у товара поле servers и содержит ли оно выбранный ID
     const serverMatch = p.servers && Array.isArray(p.servers) 
       ? p.servers.includes(selectedServerId)
       : false;
 
-    // Если кейс - не показываем в общем списке товаров (они в отдельном блоке)
+    // Скрываем кейсы из общего списка товаров
     const notCrate = !p.isCrate;
 
     return categoryMatch && serverMatch && notCrate;
@@ -91,7 +106,6 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
         if (hasDiscountA !== hasDiscountB) return hasDiscountB - hasDiscountA;
         return (b.discount?.percent || 0) - (a.discount?.percent || 0);
       case 'popular':
-        // Сортировка по ID как временная замена популярности
         return (b.id || 0) > (a.id || 0) ? 1 : -1;
       default: return 0;
     }
@@ -123,7 +137,6 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
           {servers.map(srv => (
             <button
               key={srv.id}
-              // ВАЖНО: Используем srv.identifier для сравнения (например 'srv_1')
               onClick={() => onServerChange(srv.identifier)}
               className={`px-5 py-3 rounded-xl text-xs font-bold transition-all uppercase tracking-wide border ${selectedServerId === srv.identifier ? 'bg-ostrum-primary text-white border-ostrum-primary shadow-[0_5px_15px_rgba(139,92,246,0.3)]' : 'bg-black/40 text-ostrum-muted hover:text-white border-white/5'}`}
             >
@@ -232,7 +245,8 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
-            {/* Sidebar */}
+            
+            {/* 👇 САЙДБАР: Теперь грузится из массива categories 👇 */}
             <aside className="w-full lg:w-72 flex-shrink-0">
                 <div className="bg-ostrum-card rounded-[2.5rem] border border-white/5 p-6 sticky top-24 shadow-2xl">
                     <div className="flex items-center justify-between mb-8 px-2">
@@ -240,22 +254,48 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
                             <LayoutGrid size={12} /> Категории
                         </h2>
                     </div>
+                    
                     <div className="flex flex-col gap-1.5">
-                        <button 
-                            onClick={() => setSelectedCategory('ALL')}
-                            className={`text-left px-5 py-3.5 rounded-xl transition-all font-bold text-[11px] uppercase tracking-wide border ${selectedCategory === 'ALL' ? 'bg-ostrum-primary border-ostrum-primary text-white shadow-lg' : 'bg-transparent border-transparent text-ostrum-muted hover:bg-white/5 hover:text-white'}`}
-                        >
-                            Все товары
-                        </button>
-                        {Object.values(ProductCategory).filter(c => c !== ProductCategory.CRATES).map((cat) => (
-                            <button 
-                                key={cat}
-                                onClick={() => setSelectedCategory(cat)}
-                                className={`text-left px-5 py-3.5 rounded-xl transition-all font-bold text-[11px] uppercase tracking-wide border ${selectedCategory === cat ? 'bg-ostrum-primary border-ostrum-primary text-white shadow-lg' : 'bg-transparent border-transparent text-ostrum-muted hover:bg-white/5 hover:text-white'}`}
-                            >
-                                {cat}
-                            </button>
-                        ))}
+                        {categories.map((cat) => {
+                            const isAll = cat.slug === 'all';
+                            const isActive = selectedCategory === cat.slug;
+
+                            // Стили для кнопки "Все товары" (Фиолетовая плашка)
+                            if (isAll) {
+                                return (
+                                    <button 
+                                        key={cat.id}
+                                        onClick={() => setSelectedCategory(cat.slug)}
+                                        className={`w-full text-center px-5 py-4 rounded-2xl transition-all font-black text-xs uppercase tracking-wide shadow-lg mb-4 ${
+                                            isActive 
+                                            ? 'bg-ostrum-primary text-white border border-ostrum-primary shadow-ostrum-primary/30' 
+                                            : 'bg-ostrum-primary/80 text-white/80 hover:bg-ostrum-primary hover:text-white'
+                                        }`}
+                                    >
+                                        {cat.name}
+                                    </button>
+                                );
+                            }
+
+                            // Стили для остальных категорий
+                            return (
+                                <button 
+                                    key={cat.id}
+                                    onClick={() => setSelectedCategory(cat.slug)}
+                                    className={`text-left px-5 py-3.5 rounded-xl transition-all font-bold text-[11px] uppercase tracking-wide border ${
+                                        isActive 
+                                        ? 'bg-white/10 text-white border-white/5' 
+                                        : 'bg-transparent border-transparent text-ostrum-muted hover:bg-white/5 hover:text-white'
+                                    }`}
+                                >
+                                    {cat.name}
+                                </button>
+                            );
+                        })}
+                        
+                        {categories.length === 0 && (
+                            <div className="text-center py-4 text-[10px] text-ostrum-muted animate-pulse">Загрузка категорий...</div>
+                        )}
                     </div>
 
                     <div className="mt-10 pt-6 border-t border-white/5">
@@ -326,7 +366,7 @@ const Home: React.FC<HomeProps> = ({ products, servers, onProductClick, selected
                     <div className="flex flex-col items-center justify-center py-24 bg-black/10 rounded-[3rem] border border-white/5 border-dashed">
                         <ShoppingBag size={48} className="text-ostrum-muted/10 mb-6" />
                         <div className="text-ostrum-muted font-bold uppercase tracking-widest text-[10px] opacity-30">
-                            {products.length === 0 ? "Загрузка товаров..." : "На этом сервере товаров пока нет"}
+                            {products.length === 0 ? "Загрузка товаров..." : "В этой категории пусто"}
                         </div>
                     </div>
                 )}

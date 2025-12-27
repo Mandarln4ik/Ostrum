@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User as UserIcon, LogOut, Menu, X, Shield, FileText, Wallet, Plus, Snowflake, Ticket, Bell } from 'lucide-react';
-import { User, Notification } from '../types';
+import { User, Notification, UserRole } from '../types';
 import { Link, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
@@ -56,7 +56,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogin, onLogout, onOp
                     {link.name}
                 </Link>
                 ))}
-                {user?.role === 'ADMIN' && (
+                {user?.role === UserRole.ADMIN && (
                 <Link to="/admin" className="text-[10px] uppercase tracking-widest font-black text-ostrum-accent hover:text-red-400">Админ-панель</Link>
                 )}
             </nav>
@@ -162,7 +162,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogin, onLogout, onOp
                 <Link key={link.path} to={link.path} onClick={() => setMobileMenuOpen(false)} className="bg-white/5 px-4 py-3 rounded-xl text-[10px] font-black text-ostrum-muted hover:text-white uppercase tracking-widest text-center border border-white/5">{link.name}</Link>
                 ))}
             </div>
-             {user?.role === 'ADMIN' && (
+             {user?.role === UserRole.ADMIN && (
               <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block text-center py-3 bg-red-500/10 rounded-xl text-[10px] font-black text-ostrum-accent uppercase tracking-widest border border-red-500/10">Админ-панель</Link>
             )}
              {user && (

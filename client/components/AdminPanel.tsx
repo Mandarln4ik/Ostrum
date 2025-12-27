@@ -31,7 +31,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   // Локальные данные
   const [localPromos, setLocalPromos] = useState<PromoCode[]>(initialPromos);
   const [localUsers, setLocalUsers] = useState<User[]>(initialUsers);
-  const [localCategories, setLocalCategories] = useState<Category[]>(initialCategories);
+  const [localCategories, setLocalCategories] = useState<Category[]>(initialCategories || []);
 
   // UI стейты
   const [isEditing, setIsEditing] = useState(false);
@@ -347,7 +347,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div>
                         <label className="text-[9px] font-bold text-ostrum-muted uppercase ml-2">Категория</label>
                         <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs font-bold outline-none" value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})}>
-                            {localCategories.map(cat => <option key={cat.id} value={cat.slug} className="bg-black">{cat.name}</option>)}
+                            {(localCategories || []).map(cat => <option key={cat.id} value={cat.slug} className="bg-black">{cat.name}</option>)}
                         </select>
                     </div>
                     <div className="grid grid-cols-2 gap-4">

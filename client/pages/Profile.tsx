@@ -138,7 +138,6 @@ const Profile: React.FC<ProfileProps> = ({ user, transactions, pendingItems, ser
                               // Безопасный поиск сервера
                               const server = servers.find(s => s.identifier === item.serverId) || servers.find(s => String(s.id) === item.serverId);
                               const serverName = server ? server.name : 'Неизвестно';
-
                               return (
                                   <div key={item.id} className="bg-black/30 border border-white/5 p-6 rounded-3xl flex items-center gap-5 group hover:border-ostrum-primary/30 transition-all">
                                       <div className="bg-white/5 p-4 rounded-2xl group-hover:bg-ostrum-primary/10 transition-colors shrink-0">

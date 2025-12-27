@@ -29,13 +29,22 @@ export class CategoriesService {
 
   // Начальные категории
   async seed() {
-    if (await this.repo.count() === 0) {
+    const count = await this.repo.count();
+    if (count === 0) {
       await this.repo.save([
-        { slug: 'resources', name: 'Ресурсы', sortOrder: 1 },
-        { slug: 'weapons', name: 'Оружие', sortOrder: 2 },
-        { slug: 'armor', name: 'Броня', sortOrder: 3 },
-        { slug: 'misc', name: 'Разное', sortOrder: 4 },
+        { name: 'Все товары', slug: 'all', sortOrder: 0 }, // 👈 Та самая запись по умолчанию
+        { name: 'Ресурсы', slug: 'resources', sortOrder: 1 },
+        { name: 'Инструменты', slug: 'tools', sortOrder: 2 },
+        { name: 'Оружие', slug: 'weapons', sortOrder: 3 },
+        { name: 'Броня', slug: 'attire', sortOrder: 4 },
+        { name: 'Боеприпасы', slug: 'ammo', sortOrder: 5 },
+        { name: 'Медикаменты и еда', slug: 'medical', sortOrder: 6 },
+        { name: 'Конструкции', slug: 'construction', sortOrder: 7 },
+        { name: 'Компоненты', slug: 'components', sortOrder: 8 },
+        { name: 'Электрика', slug: 'electric', sortOrder: 9 },
+        { name: 'Наборы (KITS)', slug: 'kits', sortOrder: 10 },
       ]);
+      console.log('✅ Categories seeded');
     }
   }
 }
