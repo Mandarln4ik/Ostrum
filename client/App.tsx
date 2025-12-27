@@ -22,6 +22,8 @@ import { ItemsService, GameItem } from './services/items.service';
 import { jwtDecode } from "jwt-decode";
 import { AuthService } from "./services/auth.service";
 
+import api from './api/axios';
+
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
   if (!user) return <Navigate to="/" replace />;
   if (adminOnly && user.role !== UserRole.ADMIN) return <Navigate to="/" replace />;
@@ -99,8 +101,10 @@ const App = () => {
   const [allUsers, setAllUsers] = useState<User[]>([{ ...MOCK_USER, productCooldowns: {} }]); 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isTopUpOpen, setIsTopUpOpen] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
-  const [pendingItems, setPendingItems] = useState<PendingItem[]>(MOCK_PENDING_ITEMS);
+  
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
+
   const [servers, setServers] = useState<Server[]>([]); 
   const [selectedServerId, setSelectedServerId] = useState<string>('');
   const [gameItems, setGameItems] = useState<GameItem[]>([]);
@@ -135,25 +139,27 @@ const App = () => {
     // 2. Проверяем, есть ли токен в памяти
     const token = localStorage.getItem('token');
     if (token) {
-      try {
-          const decoded: any = jwtDecode(token);
-          // decoded.sub — это ID пользователя в базе (мы зашили его туда на бэкенде)
-          AuthService.getUser(decoded.sub).then(userData => {
+    try {
+        const decoded: any = jwtDecode(token);
+        AuthService.getUser(decoded.sub).then(async (userData) => {
             setUser(userData);
+            
+            // 👇 ДОБАВЛЯЕМ ЗАГРУЗКУ ДАННЫХ
+            try {
+                const [invRes, transRes] = await Promise.all([
+                    api.get(`/users/${userData.id}/inventory`),
+                    api.get(`/users/${userData.id}/transactions`)
+                ]);
+                setPendingItems(invRes.data);
+                setTransactions(transRes.data);
+            } catch (err) {
+                console.error("Ошибка загрузки инвентаря:", err);
+            }
 
-            // Обновляем список всех юзеров (для админки/рефералки), если его там нет
-            setAllUsers(prev => {
-              if (!prev.find(u => u.id === userData.id)) {
-                return [...prev, userData];
-              }
-            return prev;});
-            }).catch(err => {
-               console.error("Ошибка загрузки профиля:", err);
-               localStorage.removeItem('token'); // Если токен тухлый
-           });
-       } catch (e) {
-           localStorage.removeItem('token');
-       }
+        }).catch(() => localStorage.removeItem('token'));
+    } catch (e) {
+        localStorage.removeItem('token');
+    }
     }
     
     // ... загрузка товаров и серверов ...
@@ -249,7 +255,8 @@ const App = () => {
 
   // --- Логика моковых юзеров (пока оставляем как есть, до шага 2) ---
   const handleLogin = () => {
-    window.location.href = 'http://localhost:3001/api/auth/steam';
+    const apiUrl = import.meta.env.VITE_API_URL;
+    window.location.href = `${apiUrl}/auth/steam`;
   };
 
   const handleOpenTopUp = () => {
