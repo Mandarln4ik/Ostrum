@@ -9,10 +9,10 @@ export class PaymentsController {
   @Post('fake')
   async fakeTopUp(@Body() body: { userId: number, amount: number, promoCode?: string }) {
     // Тут можно добавить логику бонуса от промокода (TOPUP_BONUS), если нужно
-    let finalAmount = body.amount;
+    const finalAmount = Number(body.amount);
     // Начисляем
     await this.usersService.addBalance(body.userId, finalAmount, 'RUB');
-    // Возвращаем фейковый URL (чтобы фронт не падал, а делал редирект на главную или success)
+    // Возвращаем фейковый URL для редиректа
     return { confirmationUrl: '/?payment=success' }; 
   }
 

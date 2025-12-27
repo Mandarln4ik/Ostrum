@@ -1,25 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Ticket, Sparkles, AlertCircle } from 'lucide-react';
 import { PromoCode, User } from '../types';
+import { PromocodesService } from '../services/promocodes.service';
 
 interface TopUpModalProps {
   user: User | null;
-  promos: PromoCode[];
+  promos?: PromoCode[];
   onClose: () => void;
-  // onTopUp теперь принимает (сумма, бонус%, код)
   onTopUp: (amount: number, bonusPercent: number, appliedPromoCode?: string) => void;
 }
 
-const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp }) => {
+const TopUpModal: React.FC<TopUpModalProps> = ({ user, onClose, onTopUp }) => {
   const [amount, setAmount] = useState<string>('500');
   const [promoInput, setPromoInput] = useState<string>('');
   const [bonusPercent, setBonusPercent] = useState<number>(0);
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | undefined>(undefined);
   const [promoError, setPromoError] = useState<string | null>(null);
   
+  // Локальный стейт для промокодов
+  const [loadedPromos, setLoadedPromos] = useState<PromoCode[]>([]);
+
   const presets = [100, 300, 500, 1000, 2000, 5000];
 
-  // Логика валидации промокода
+  // 1. ЗАГРУЖАЕМ ПРОМОКОДЫ ПРИ ОТКРЫТИИ
+  useEffect(() => {
+      PromocodesService.getAll()
+        .then(data => setLoadedPromos(data))
+        .catch(console.error);
+  }, []);
+
+  // 2. ВАЛИДАЦИЯ ПРИ ВВОДЕ
   useEffect(() => {
     if (!promoInput.trim()) {
         setBonusPercent(0);
@@ -29,7 +39,7 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
     }
 
     const cleanCode = promoInput.trim().toUpperCase();
-    const foundPromo = promos.find(p => p.code === cleanCode);
+    const foundPromo = loadedPromos.find(p => p.code === cleanCode);
 
     if (!foundPromo) {
         setBonusPercent(0);
@@ -38,7 +48,6 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
         return;
     }
 
-    // Проверяем тип (только TOPUP_BONUS подходит сюда)
     if (foundPromo.rewardType !== 'TOPUP_BONUS') {
         setBonusPercent(0);
         setAppliedPromoCode(undefined);
@@ -46,7 +55,6 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
         return;
     }
 
-    // Проверяем лимит активаций
     if (foundPromo.currentActivations >= foundPromo.maxActivations) {
         setBonusPercent(0);
         setAppliedPromoCode(undefined);
@@ -54,15 +62,10 @@ const TopUpModal: React.FC<TopUpModalProps> = ({ user, promos, onClose, onTopUp 
         return;
     }
 
-    // Проверяем, использовал ли уже (если такой функционал есть на бэке, лучше чекать там, но пока тут)
-    // В user.usedPromos (если есть) можно хранить список
-    // Пока пропустим, так как поле может отсутствовать
-
-    // Успех!
     setBonusPercent(Number(foundPromo.rewardValue));
     setAppliedPromoCode(cleanCode);
     setPromoError(null);
-  }, [promoInput, promos, user]);
+  }, [promoInput, loadedPromos, user]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

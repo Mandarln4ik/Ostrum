@@ -13,6 +13,7 @@ import Profile from './pages/Profile';
 import CrateOpen from './pages/CrateOpen';
 import Rules from './pages/Rules';
 import LegalPage from './pages/Legal';
+import PromoServerModal from './components/PromoServerModal'; // 👈 ИМПОРТ
 
 // Типы и Сервисы
 import { User, UserRole, Transaction, PendingItem, PromoCode, Product } from './types';
@@ -20,22 +21,20 @@ import { ProductService } from './services/product.service';
 import { ServersService, Server } from './services/servers.service';
 import { ItemsService, GameItem } from './services/items.service';
 import { AuthService } from './services/auth.service';
+import { PromocodesService } from './services/promocodes.service';
 import api from './api/axios'; 
 
 // Иконки и UI
 import { CheckCircle2, X, AlertCircle, Ticket } from 'lucide-react';
 
-import { PromocodesService } from './services/promocodes.service';
-import PromoServerModal from './components/PromoServerModal';
-
 // --- ЗАЩИТА РОУТОВ ---
 const ProtectedRoute: React.FC<{ user: User | null; children: React.ReactNode; adminOnly?: boolean }> = ({ user, children, adminOnly }) => {
   if (!user) return <Navigate to="/" replace />;
-  if (adminOnly && user.role !== UserRole.ADMIN) return <Navigate to="/" replace />;
+  if (adminOnly && user.role !== 'admin') return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
-// --- МОДАЛКИ (Вставлены сюда, чтобы не плодить файлы для простых уведомлений) ---
+// --- МОДАЛКИ ---
 const PromoResultModal: React.FC<{ status: 'success' | 'error', message: string, onClose: () => void }> = ({ status, message, onClose }) => (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
         <div className={`bg-ostrum-card border rounded-[2.5rem] p-10 max-w-md w-full shadow-2xl text-center relative overflow-hidden animate-in zoom-in duration-300 ${status === 'success' ? 'border-green-500/20' : 'border-red-500/20'}`}>
@@ -79,14 +78,13 @@ const SuccessModal: React.FC<{ items: any[], onClose: () => void }> = ({ items, 
 
 const App = () => {
   // === СТЕЙТЫ ДАННЫХ ===
-  const [pendingPromoCode, setPendingPromoCode] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]); 
   const [servers, setServers] = useState<Server[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [gameItems, setGameItems] = useState<GameItem[]>([]);
   
-  // Данные юзера (инициализируем пустыми массивами, чтобы не было крашей)
+  // Данные юзера
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [pendingItems, setPendingItems] = useState<PendingItem[]>([]);
   
@@ -97,7 +95,11 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [purchaseResults, setPurchaseResults] = useState<any[] | null>(null);
   const [promoResult, setPromoResult] = useState<{ status: 'success' | 'error', message: string } | null>(null);
-  const [promos, setPromos] = useState<PromoCode[]>([]); // Для отображения в админке или UI
+  const [promos, setPromos] = useState<PromoCode[]>([]); 
+  
+  // Стейты для сложного промокода (выбор сервера)
+  const [pendingPromoCode, setPendingPromoCode] = useState<string | null>(null);
+  const [pendingPromoServers, setPendingPromoServers] = useState<Server[]>([]);
 
   // ==================== 1. ЗАГРУЗКА ДАННЫХ ====================
   useEffect(() => {
@@ -105,7 +107,6 @@ const App = () => {
       try {
         setIsLoading(true);
 
-        // 1. Загрузка глобальных данных
         const [serversData, productsData, itemsData, promosData] = await Promise.all([
             ServersService.getAll().catch(() => []),
             ProductService.getAll().catch(() => []),
@@ -118,12 +119,10 @@ const App = () => {
         setGameItems(itemsData || []);
         setPromos(promosData || []);
 
-        // Выбор сервера по умолчанию
         if (serversData && serversData.length > 0) {
             setSelectedServerId(serversData[0].identifier);
         }
 
-        // 2. Обработка возврата со Steam (token в URL)
         const params = new URLSearchParams(window.location.search);
         const tokenFromUrl = params.get('token');
 
@@ -132,34 +131,26 @@ const App = () => {
             window.history.replaceState({}, document.title, "/");
         }
 
-        // 3. Авторизация по токену
         const token = localStorage.getItem('token');
         if (token) {
-    try {
-        const decoded: any = jwtDecode(token);
-        const userData = await AuthService.getUser(decoded.sub);
-        
-        // 👇 ИЗМЕНЕННЫЙ БЛОК ЗАГРУЗКИ
-        const [invRes, transRes, notifRes] = await Promise.all([
-            api.get(`/users/${userData.id}/inventory`).catch(() => ({ data: [] })),
-            api.get(`/users/${userData.id}/transactions`).catch(() => ({ data: [] })),
-            // Запрашиваем уведомления:
-            api.get(`/notifications/user/${userData.id}`).catch(() => ({ data: [] })) 
-        ]);
+            try {
+                const decoded: any = jwtDecode(token);
+                const userData = await AuthService.getUser(decoded.sub);
+                setUser(userData);
 
-        // Собираем пользователя с уведомлениями
-        // Мы вручную добавляем поле notifications в объект user, чтобы Layout его увидел
-        const fullUser = { 
-            ...userData, 
-            notifications: notifRes.data || [] 
-        };
+                const [invRes, transRes, notifRes] = await Promise.all([
+                    api.get(`/users/${userData.id}/inventory`).catch(() => ({ data: [] })),
+                    api.get(`/users/${userData.id}/transactions`).catch(() => ({ data: [] })),
+                    api.get(`/notifications/user/${userData.id}`).catch(() => ({ data: [] })) 
+                ]);
 
-        setUser(fullUser); // Сохраняем полного юзера
-        setPendingItems(invRes.data || []);
-        setTransactions(transRes.data || []);
-        
-    } catch (err) { /* ... */ }
-}
+                const fullUser = { ...userData, notifications: notifRes.data || [] };
+                setUser(fullUser);
+                setPendingItems(invRes.data || []);
+                setTransactions(transRes.data || []);
+                
+            } catch (err) { /* ... */ }
+        }
 
       } catch (error) {
         console.error("Fatal Error Init:", error);
@@ -171,7 +162,7 @@ const App = () => {
     initData();
   }, []);
 
-  // ==================== 2. ЛОГИКА ДЕЙСТВИЙ (HANDLERS) ====================
+  // ==================== 2. ЛОГИКА ДЕЙСТВИЙ ====================
 
   const handleLogin = () => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -195,11 +186,9 @@ const App = () => {
         const result = await ProductService.buy(String(user.id), productId, serverId, quantity);
         
         if (result.success) {
-            // Обновляем баланс
             const updatedUser = { ...user, balance: result.newBalance, eventBalance: result.newEventBalance };
             setUser(updatedUser);
             
-            // Добавляем предметы в инвентарь (визуально)
             const newItems: PendingItem[] = (result.items || []).map((item: any) => ({
                 id: Math.random().toString(), 
                 itemName: item.name || item.itemId,
@@ -212,7 +201,6 @@ const App = () => {
             
             setPendingItems(prev => [...newItems, ...(prev || [])]);
 
-            // Если не кейс - показываем результат сразу
             const product = products.find(p => String(p.id) === productId);
             if (product && !product.isCrate) {
                 setPurchaseResults(result.items);
@@ -227,21 +215,28 @@ const App = () => {
     }
   };
 
-  // Активация промокода
+  // ЛОГИКА ПРОМОКОДОВ
   const handleRedeemPromo = async (code: string) => {
       if (!user) return handleLogin();
 
-      // 1. Ищем код в загруженном списке, чтобы узнать его тип
       const cleanCode = code.trim().toUpperCase();
       const promoInfo = promos.find(p => p.code === cleanCode);
 
-      // Если мы знаем этот код и он на предмет/кейс -> Просим сервер
+      // Если промокод на товар - требуем выбор сервера
       if (promoInfo && (promoInfo.rewardType === 'PRODUCT' || promoInfo.rewardType === 'FREE_CRATE')) {
-          setPendingPromoCode(cleanCode); // Сохраняем код
-          return; // Прерываем, ждем выбора сервера в модалке
+          const product = products.find(p => p.id === promoInfo.rewardValue);
+          
+          if (product && product.servers && product.servers.length > 0) {
+              const allowedServers = servers.filter(s => product.servers.includes(s.identifier));
+              
+              if (allowedServers.length > 0) {
+                  setPendingPromoServers(allowedServers);
+                  setPendingPromoCode(cleanCode); // Открываем модалку
+                  return;
+              }
+          }
       }
 
-      // Иначе (или если код не найден в списке, попробуем отправить так, вдруг сработает как баланс)
       submitRedeem(cleanCode);
   };
 
@@ -252,45 +247,27 @@ const App = () => {
           
           setPromoResult({ status: 'success', message: `Успешно! Награда: ${res.reward}` });
           
-          // Обновляем данные пользователя
           const updatedUser = await AuthService.getUser(user.id);
           setUser(updatedUser);
           
-          // Если выдали предмет, обновляем инвентарь (можно оптимизировать, но пока перезапросим)
           const invRes = await api.get(`/users/${user.id}/inventory`);
           setPendingItems(invRes.data || []);
 
       } catch (error: any) {
           setPromoResult({ status: 'error', message: error.response?.data?.message || "Ошибка активации" });
       } finally {
-          setPendingPromoCode(null); // Закрываем модалку выбора сервера
+          setPendingPromoCode(null);
       }
   };
 
-  // Установка реферала
-  const handleSetReferrer = async (code: string) => {
-      if (!user) return;
-      try {
-          await api.post(`/users/${user.id}/referrer`, { code });
-          setPromoResult({ status: 'success', message: "Реферальный код активирован!" });
-          const updatedUser = await AuthService.getUser(user.id);
-          setUser(updatedUser);
-      } catch (error: any) {
-          setPromoResult({ status: 'error', message: error.response?.data?.message || "Ошибка активации кода" });
-      }
-  };
-
-  // Пополнение баланса (ЮKassa)
   const handleTopUp = async (amount: number, bonusPercent: number = 0, appliedPromoCode?: string) => {
       if (!user) return;
       try {
-          // Инициализация платежа
           const res = await api.post('/payments/create', { 
               userId: user.id, 
               amount, 
               promoCode: appliedPromoCode 
           });
-          // Перенаправление на страницу оплаты ЮKassa
           if (res.data.confirmationUrl) {
               window.location.href = res.data.confirmationUrl;
           }
@@ -299,7 +276,6 @@ const App = () => {
       }
   };
 
-  // --- Заглушки для админских функций (они внутри AdminPanel) ---
   const handleUpdateUserBalance = () => {}; 
   const handleSendNotification = () => {}; 
   const handleSendGlobal = () => {}; 
@@ -356,12 +332,11 @@ const App = () => {
             <ProtectedRoute user={user}>
                 <Profile 
                     user={user!} 
-                    // Защита от undefined
                     transactions={(transactions || []).filter(t => t && (!user || t.userId === user.id))} 
                     pendingItems={pendingItems || []} 
                     servers={servers || []} 
-                    onSetReferrer={handleSetReferrer}
-                    gameItems={gameItems} 
+                    onSetReferrer={() => {}} 
+                    gameItems={gameItems || []}
                 />
             </ProtectedRoute>
           } />
@@ -379,6 +354,7 @@ const App = () => {
                     onSendNotification={handleSendNotification} 
                     onSendGlobalNotification={handleSendGlobal} 
                     gameItems={gameItems || []}
+                    categories={[]} // Сюда можно прокинуть категории, если загрузишь
                 />
             </ProtectedRoute>
           } />
@@ -404,13 +380,16 @@ const App = () => {
                 onTopUp={handleTopUp} 
             />
         )}
+        
+        {/* МОДАЛКА ВЫБОРА СЕРВЕРА ДЛЯ ПРОМО */}
         {pendingPromoCode && (
             <PromoServerModal 
-                servers={servers} 
+                servers={pendingPromoServers.length > 0 ? pendingPromoServers : servers} 
                 onClose={() => setPendingPromoCode(null)} 
                 onSelect={(serverId) => submitRedeem(pendingPromoCode, serverId)} 
             />
         )}
+
         {purchaseResults && <SuccessModal items={purchaseResults} onClose={() => setPurchaseResults(null)} />}
         {promoResult && <PromoResultModal status={promoResult.status} message={promoResult.message} onClose={() => setPromoResult(null)} />}
       </Layout>
