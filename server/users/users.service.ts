@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from './user.entity';
+import { User, UserRole } from './user.entity'; // 👈 ВАЖНО: Добавлен импорт UserRole
 import { InventoryItem } from '../inventory/inventory.entity';
 import { Transaction } from '../transactions/transaction.entity';
 
@@ -48,8 +48,8 @@ export class UsersService {
         nickname,
         avatar,
         referralCode: 'REF-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-        // 👇 ЗАМЕНИ ЭТОТ ID НА СВОЙ STEAMID64, ЧТОБЫ СТАТЬ АДМИНОМ
-        role: steamId === '76561198123456789' ? 'admin' : 'user' 
+        // 👇 ИСПРАВЛЕНО: Используем Enum вместо строк
+        role: steamId === '76561198123456789' ? UserRole.ADMIN : UserRole.USER 
       });
       await this.usersRepository.save(user);
     } else {
@@ -75,7 +75,7 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  // --- ИНВЕНТАРЬ И ИСТОРИЯ (Чтобы фронт не падал) ---
+  // --- ИНВЕНТАРЬ И ИСТОРИЯ ---
 
   // Получить инвентарь игрока (только PENDING - не полученные)
   async getInventory(userId: number) {
