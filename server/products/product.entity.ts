@@ -9,7 +9,7 @@ export class Product {
   name: string;
 
   @Column()
-  shortname: string; // ak47.rifle и т.д.
+  shortname: string; // Важно для выдачи в игре
 
   @Column({ type: 'bigint', default: 0 })
   skin_id: number;
@@ -19,16 +19,41 @@ export class Product {
 
   @Column()
   price: number;
-  
-  @Column({ default: 'RUB' }) 
-  currency: string; // 'RUB' | 'EVENT'
+
+  @Column({ default: 'RUB' })
+  currency: string;
 
   @Column()
   image_url: string;
 
   @Column({ default: 'misc' })
   category: string;
+  
+  @Column({ default: false })
+  isCrate: boolean;
 
-   @Column({ type: 'json', nullable: true })
-  servers: string[]; 
+  @Column({ default: false })
+  isFree: boolean;
+
+  @Column({ default: 0 })
+  cooldownHours: number;
+
+  @Column({ type: 'float', default: 0 })
+  eventBonus: number;
+
+  // Храним содержимое обычного товара (массив)
+  @Column({ type: 'json', nullable: true })
+  contents: any;
+
+  // Храним содержимое кейса (массив с шансами)
+  @Column({ type: 'json', nullable: true })
+  lootTable: any;
+
+  // Список серверов
+  @Column({ type: 'json', nullable: true })
+  servers: any;
+  
+  // Скидка (объект { percent: 10, endsAt: ... })
+  @Column({ type: 'json', nullable: true })
+  discount: any;
 }
