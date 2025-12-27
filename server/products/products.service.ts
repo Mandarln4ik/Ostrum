@@ -14,6 +14,22 @@ export class ProductsService {
     return this.productsRepository.find();
   }
 
+  // 1. Создание товара
+  create(product: Partial<Product>): Promise<Product> {
+    return this.productsRepository.save(product);
+  }
+
+  // 2. Обновление товара
+  async update(id: number, productData: Partial<Product>): Promise<Product> {
+    await this.productsRepository.update(id, productData);
+    return this.productsRepository.findOneBy({ id });
+  }
+
+  // 3. Удаление товара
+  async remove(id: number): Promise<void> {
+    await this.productsRepository.delete(id);
+  }
+
   // Метод для создания тестовых данных (можно вызвать один раз)
   async seed() {
     const count = await this.productsRepository.count();

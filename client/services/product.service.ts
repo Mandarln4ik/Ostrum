@@ -7,6 +7,20 @@ export const ProductService = {
     return response.data;
   },
   
-  // В будущем сюда добавим методы:
-  // getById(id), buy(id) и т.д.
+  // Создать
+  async create(product: Partial<Product>): Promise<Product> {
+    const response = await api.post<Product>('/products', product);
+    return response.data;
+  },
+
+  // Обновить
+  async update(id: number, product: Partial<Product>): Promise<Product> {
+    const response = await api.put<Product>(`/products/${id}`, product);
+    return response.data;
+  },
+
+  // Удалить
+  async delete(id: number): Promise<void> {
+    await api.delete(`/products/${id}`);
+  }
 };

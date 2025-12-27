@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product, ProductCategory, ServerInfo, PromoCode, PromoRewardType, User, Notification, CurrencyType } from '../types';
 import { GameItem } from '../services/items.service'; // Используем новый тип
 import { Trash, Clock, Package, Zap, Percent, Search, Megaphone, Check, ImageIcon, Ticket, X, Users as UsersIcon, Send, User as UserIcon } from 'lucide-react';
+import { ProductService } from '../services/product.service';
 
 interface AdminPanelProps {
   products: Product[];
@@ -41,28 +42,55 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
   const [bonusInput, setBonusInput] = useState<{ [key: string]: { rub: string, event: string } }>({});
 
   const handleSaveProduct = async () => {
+    // Валидация
     if (!editingProduct.name || editingProduct.name.trim() === '') return alert('Введите название товара!');
     if (!editingProduct.servers || editingProduct.servers.length === 0) return alert('Выберите хотя бы один сервер!');
-    
-    // В будущем: POST запрос к API /products
-    console.log("Сохранение товара:", editingProduct);
-    
-    const newProduct: Product = { 
-      ...editingProduct as Product, 
-      id: editingProduct.id || Math.floor(Math.random() * 100000), 
-      price: editingProduct.isFree ? 0 : (editingProduct.price || 0),
-      contents: editingProduct.contents || [],
-      lootTable: editingProduct.lootTable || [],
-      image_url: editingProduct.image_url || 'https://picsum.photos/200/200',
-      servers: editingProduct.servers || []
-    };
 
-    if (editingProduct.id) {
-        setProducts(products.map(p => p.id === newProduct.id ? newProduct : p));
-    } else {
-        setProducts([...products, newProduct]);
+    try {
+      // Подготовка данных (убираем undefined, если есть)
+      const productData: Partial<Product> = {
+        name: editingProduct.name,
+        price: editingProduct.isFree ? 0 : (editingProduct.price || 0),
+        currency: editingProduct.currency || 'RUB',
+        category: editingProduct.category,
+        image_url: editingProduct.image_url,
+        isCrate: editingProduct.isCrate,
+        isFree: editingProduct.isFree,
+        eventBonus: editingProduct.eventBonus,
+        cooldownHours: editingProduct.cooldownHours,
+        // Массивы и JSON
+        contents: editingProduct.contents || [],
+        lootTable: editingProduct.lootTable || [],
+        servers: editingProduct.servers || [], // srv_1
+        // Скидка
+        discount: editingProduct.discount
+      };
+      
+      // Временно добавляем shortname и skin_id (если их нет в форме, шлем дефолт)
+      // В будущем добавь поля в форму админки!
+      (productData as any).shortname = (editingProduct as any).shortname || 'item.undefined'; 
+      (productData as any).skin_id = 0;
+
+      let savedProduct: Product;
+
+      if (editingProduct.id) {
+        // --- ОБНОВЛЕНИЕ ---
+        savedProduct = await ProductService.update(editingProduct.id, productData);
+        // Обновляем список на фронте без перезагрузки
+        setProducts(products.map(p => p.id === savedProduct.id ? savedProduct : p));
+      } else {
+        // --- СОЗДАНИЕ ---
+        savedProduct = await ProductService.create(productData);
+        setProducts([...products, savedProduct]);
+      }
+
+      setIsEditing(false);
+      alert('Товар успешно сохранен!');
+
+    } catch (error) {
+      console.error('Ошибка сохранения:', error);
+      alert('Не удалось сохранить товар. Проверьте консоль.');
     }
-    setIsEditing(false);
   };
 
   const handleSavePromo = () => {
@@ -213,7 +241,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ products, setProducts, servers,
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     {products.map(p => (
-                        <div key={p.id} onClick={() => { setEditingProduct(p); setIsEditing(true); }} className="bg-black/20 p-5 rounded-2xl border border-white/5 flex items-center gap-4 cursor-pointer hover:border-ostrum-primary transition-all group relative">
+                        <div key={p.id} onClick={async (e) => { 
+    e.stopPropagation(); 
+    if(confirm('Удалить товар из Базы Данных?')) {
+        try {
+            await ProductService.delete(p.id); // Удаляем из БД
+            setProducts(products.filter(item => item.id !== p.id)); // Удаляем из интерфейса
+        } catch (err) {
+            alert('Ошибка удаления');
+            console.error(err);
+        }
+    } 
+}} className="bg-black/20 p-5 rounded-2xl border border-white/5 flex items-center gap-4 cursor-pointer hover:border-ostrum-primary transition-all group relative">
                             <button onClick={(e) => { e.stopPropagation(); if(confirm('Удалить?')) setProducts(products.filter(item => item.id !== p.id)); }} className="absolute top-2 right-2 text-red-500 opacity-0 group-hover:opacity-100"><Trash size={14} /></button>
                             {p.discount && <div className="absolute bottom-2 left-2 bg-ostrum-accent text-white text-[8px] font-black px-1.5 py-0.5 rounded">-{p.discount.percent}%</div>}
                             <img src={p.image_url} className="w-14 h-14 object-contain" alt="" />
